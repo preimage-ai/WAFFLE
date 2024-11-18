@@ -17,6 +17,7 @@ test_countries.json
 ├── ...
 ├── data
 │   ├── original_size_images
+│   ├── svg_files
 │   ├── outputs
 |   |   ├── ocr_outputs_v2
 |   |   ├── legend_outputs
@@ -30,7 +31,9 @@ test_countries.json
 The following fields exist in the `dataset.csv` data frame:
 * `page_id`: a unique ID associated with each entry
 * `img_url`: the link to the image's associated wiki-commons page
+* `svg_url`: the link to the svg's associated wiki-commons page (when it exists)
 * `img_path`: the relative path to where the image JPG file is stored
+* `svg_path`: the relative path to where the SVG file is stored  (when it exists)
 * `building_type`: the type of the identified building
 * `high_level_building_type`: the clustered type of the identified building (out of 10 options: )
 * `building_name`: the name of the identified building
