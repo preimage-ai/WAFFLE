@@ -1,0 +1,16 @@
+[INST]
+
+The following text contains a description of an architectural feature of a {building_type} floor plan:
+
+--- START ARCHITECTURAL FEATURE ---
+
+{arch_feat}
+
+--- END ARCHITECTURAL FEATURE ---
+
+What is the type of the architectural feature?  Answer in English surrounded by brackets < >.
+If you can't derive an architectural feature or the text doesn't contain one, return "I don't know".
+
+[/INST]
+
+The type of the architectural feature is <

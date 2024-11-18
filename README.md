@@ -5,16 +5,11 @@
 
 
 ### Download
-Download and extract all files in the following folder: [Drive Folder](https://drive.google.com/drive/folders/1scJZgjT1HtNCjqgaafHNpu9xq6Y0pP1Q?usp=drive_link).
+Download and extract all files in the [following folder](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fdata).
 
 
 ### Organize
 Create the following folder structure using the data you downloaded and extracted:
-
-
-> **_📝 TODO:_** Add all extracted data here including OD results and pre-processed legends.
-> 
-> **_📝 TODO:_** Pre-organize the structure in the drive folder.
 ```
 .
 dataset.csv
@@ -42,14 +37,24 @@ The following fields exist in the `dataset.csv` data frame:
 * `country`: the country of the identified building
 * `ocr_fn`: the relative path to where the extracted OCR texts are stored
 * `ocr_texts`: the extracted texts from the image, from top to bottom & left to right
-* `grounded_unified_fn`: the relative path to where the grounded legends and architectural features are stored
+* `grounded_legend_fn`: the relative path to where the grounded legends and architectural features are stored
 
+## Finetuned Models
 
-> **_📝 TODO:_** Include all other interesting fields.
+Finetuned models checkpoints can be found [here](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fmodels), and helper inference code under `src/helpers`.
 
+## Code
 
-## Helper classes
-> **_📝 TODO:_** Include code references for easier access to OCR, OD, legends, etc.
+All the code is under `src`, and should be run in the following environment:
 
-## Models
-> **_📝 TODO:_** Include trained models: OD, segmentation, generation etc.
+Create a new conda env
+```
+conda create -n waffle python=3.10
+conda activate waffle
+```
+Install the requirements
+
+```
+pip install -r requirements.txt
+pip install -e src/
+```

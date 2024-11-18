@@ -1,0 +1,33 @@
+[INST]
+Please read the following (truncated) information extracted from Wikipedia related to an image:
+
+--- START WIKI INFO ---
+
+* Entity category:
+{category}
+
+* Entity description:
+{description}
+
+* Image filename:
+{fn}
+
+* Texts that appear in the image (extracted with OCR):
+{ocr_texts}
+
+--- END WIKI INFO ---
+
+Now answer the following question, in English: What is this file most likely a depiction of?
+(A) A floorplan
+(B) A building
+(C) A cross section of a building
+(D) A garden/park
+(E) A Map
+(F) A city/town
+(G) A physics/mathematics topic
+(H) I don't know
+Please choose one answer (A/B/C/D/E/F/G/H)
+
+[/INST]
+
+The best answer is (

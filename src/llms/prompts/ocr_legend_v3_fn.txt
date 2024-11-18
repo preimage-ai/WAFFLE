@@ -1,0 +1,19 @@
+[INST]
+
+The image "{fn}" is a plan of the building "{building_name}" and it contains the following texts (detected by an OCR model).
+
+--- START IMAGE TEXTS ---
+
+{ocr_legend_candidate}
+
+--- END IMAGE TEXTS ---
+
+The above texts may contain, among other things, the content of a legend of the image in a key value format.
+Can you extract the legend contents from the above texts?
+Answer with a bulleted list of the legend contents.
+Include only information that is in some key value format, like enumeration, lables etc. Disregard text that doesn't seem like it's part of the legend.
+Include the key and value in their original format and don't invent new ones. If you can't deduce a legend, return "I don't know".
+
+[/INST]
+
+Sure! Here are the legend contents:

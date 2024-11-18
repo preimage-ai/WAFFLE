@@ -1,0 +1,29 @@
+[INST]
+
+The following texts contain a legend of a {building_type} floor plan in a key: value format:
+
+--- START LEGEND ---
+
+{legend}
+
+--- END LEGEND ---
+
+Please rewrite the legend using simple and generic words.
+
+Do:
+* Include all legend parts from the list above.
+* Keep it simple and short - summarize each row in one or two words
+* Keep the original legend keys
+* In case the features have distinct names (e.g. Chapel of the Ascension) treat their type only (e.g. a chapel) and disregard any specific name.
+
+Don't:
+* Don't invent new information
+* Don't specific names (treat their type instead)
+* Don't skip any of the legend lines above
+
+Write your answer in English only, translating any non-English terms into English.
+
+[/INST]
+
+Sure, here's a simplified and generalized version of the legend:
+*

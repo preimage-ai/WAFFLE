@@ -1,0 +1,18 @@
+[INST]
+
+The image "{fn}" is a plan of the building "{building_name}" and it contains the following texts, detected by an OCR model:
+
+--- START IMAGE TEXTS ---
+
+{ocr_arch_feat_candidate}
+
+--- END IMAGE TEXTS ---
+
+Do the OCR detections above look like they contain words that represent architectural feature labels? 
+Disregard anything that looks like a symbol or a key (like numbers), and any words that represent direction (e.g. north, east, etc.)
+
+Write yes/no/not sure in English, surrounded by brackets < >
+
+[/INST]
+
+<

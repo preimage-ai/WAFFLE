@@ -1,0 +1,21 @@
+[INST]
+
+The image "{fn}" is a plan of the building "{building_name}" and it contains the following texts (detected by an OCR model).
+
+--- START IMAGE TEXTS ---
+
+{ocr_arch_feat_candidate}
+
+--- END IMAGE TEXTS ---
+
+The above texts may contain, among other things, architectural features marked on the floorplan.
+Out of the texts above, can you extract those that represent architectural features? Like room types, halls, porches, etc.
+Don't include anything that looks like a symbol or a key (like numbers). Don't include any words that represent direction (e.g. north, east, etc.). Disregard text that isn't related to architectural features.
+Answer with a bulleted list of the architectural features. Use the original text, do not modify, translate, or add extensions to the text you chose to add.
+If you can't deduce any architectural features return "I don't know".
+
+
+[/INST]
+
+
+Sure! Here are the architectural features that appear in the texts you provided:

@@ -1,0 +1,25 @@
+[INST]
+Please read the following (truncated) information extracted from Wikipedia related to an image of the building {building_name}:
+
+--- START WIKI INFO ---
+
+* Image filename:
+{fn}
+
+* Entity category:
+{category}
+
+* Wiki page summary:
+{wiki_shows}
+
+* Entity description:
+{description}
+
+--- END WIKI INFO ---
+
+Where is {building_name} located? Write the country, state (if exists) and city surrounded by brackets < > and separate between them with a semi colon, for example: <City; State; Country>.
+If one of them is unknown write 'Unknown', for example <City; Unknown; Country>, <Unknown; State; Country> etc.
+
+[/INST]
+
+{building_name} is located in <

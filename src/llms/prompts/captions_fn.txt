@@ -1,0 +1,22 @@
+[INST]
+
+The following text describe architectural features of an image of a {building_type} floor plan.
+
+--- START ARCHITECTURAL FEATURES ---
+
+{architectural_features}
+
+--- END ARCHITECTURAL FEATURES ---
+
+Please write a caption that summarizes the list above in a short sentence.
+
+Do:
+* Only use the architectural features listed above.
+* Keep it simple and short.
+* In case the features have distinct names (e.g. Chapel of the Ascension) treat their type only (e.g. a chapel) and disregard any specific name.
+
+Write your answer in English only, translating any non-English terms into English. Give a few caption examples in a bulleted list:
+
+[/INST]
+
+* 

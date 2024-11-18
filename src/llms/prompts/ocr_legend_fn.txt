@@ -1,0 +1,18 @@
+[INST]
+
+The image "{fn}" is a plan of the building "{building_name}" and it contains the following texts, detected by an OCR model:
+
+--- START IMAGE TEXTS ---
+
+{ocr_texts}
+
+--- END IMAGE TEXTS ---
+
+Does the discussed image contain a legend (as in a key/table/code for understanding the image)? If so, what are the legend's contents?
+Answer with a bulleted list in English of the legend contents.
+Include only full items and not just labels (for example, '1. naive' should be included, but '1.' alone shouldn't). Use the original labels and don't invent new ones. If you can't deduce a legend return "I don't know".
+
+[/INST]
+
+Answer: The legend contains:
+* 

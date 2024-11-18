@@ -1,0 +1,25 @@
+[INST]
+Please read the following (truncated) information extracted from Wikipedia related to an image of the building {building_name}:
+
+--- START WIKI INFO ---
+
+* Image filename:
+{fn}
+
+* Entity category:
+{category}
+
+* Wiki page summary:
+{wiki_shows}
+
+* Entity description:
+{description}
+
+
+--- END WIKI INFO ---
+
+What type or category of building is {building_name}? Write your answer in English, surrounded by brackets < >
+
+[/INST]
+
+The building {building_name} is a <

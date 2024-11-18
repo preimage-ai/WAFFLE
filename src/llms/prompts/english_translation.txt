@@ -1,0 +1,7 @@
+[INST]
+
+Can you translate the text "{text}" to English? Write it in English, surrounded by brackets < >
+
+[/INST]
+
+"{text}" in English is: <

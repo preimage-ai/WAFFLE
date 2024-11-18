@@ -1,0 +1,20 @@
+[INST]
+
+The image "{fn}" is a plan of the building "{building_name}" and it contains the following texts, detected by an OCR model:
+
+--- START IMAGE TEXTS ---
+
+* Texts that appear in the image (extracted with OCR):
+
+{ocr_texts}
+
+--- END IMAGE TEXTS ---
+
+Do the OCR detections above look like they contain a legend for the image, i.e. an itemized list corresponding to regions marked by OCR labels in the image, explaining what each label signifies?
+Look for key value formats.
+
+Write yes/no/not sure in English, surrounded by brackets < >
+
+[/INST]
+
+<

@@ -1,0 +1,27 @@
+[INST]
+Please read the following (truncated) information extracted from Wikipedia related to an image of a building:
+
+--- START WIKI INFO ---
+
+* Image filename:
+{fn}
+
+* Entity category:
+{category}
+
+* Wiki page summary:
+{wiki_shows}
+
+* Entity description:
+{description}
+
+* Texts that appear in the image (extracted with OCR):
+{ocr_texts}
+
+--- END WIKI INFO ---
+
+What is the name of the building depicted above? Write it in English, surrounded by brackets < >
+
+[/INST]
+
+The name of the building discussed by the article is <
