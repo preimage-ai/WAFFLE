@@ -5,7 +5,7 @@
 
 
 ### Download
-Download and extract all files in the [following folder](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fdata).
+Download and extract all files in the [following folder](https://tauex-my.sharepoint.com/:f:/g/personal/hadarelor_tauex_tau_ac_il/EqMX9nRbJ9xFiK7dR_m07b8BldS2saoZ4-ockqncJb_Hrg?e=zGIuos).
 
 
 ### Organize
@@ -43,11 +43,11 @@ The following fields exist in the `dataset.csv` data frame:
 SVGs and PNGs can be found [here](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fdata%2Fbenchmark).
 ## Finetuned Models
 
-Finetuned models checkpoints can be found [here](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fmodels), and helper inference code under `src/helpers`.
+Finetuned models checkpoints can be found [here](https://tauex-my.sharepoint.com/:f:/g/personal/hadarelor_tauex_tau_ac_il/Ekk92mOOP8RJgLcAVphW918B_RFwh7Z5a5eDQpyXZSanVQ?e=tgUo5k), and helper inference code under `src/helpers`.
 
 ## Code
 
-All the code for creating the dataset and finetuning the models is under `src`. Some of the funtuning code requires additional training data which can be found [here](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Ftraining%5Fdata). The code should be run in the following environment:
+All the code for creating the dataset and finetuning the models is under `src`. Some of the funtuning code requires additional training data which can be found [here](https://tauex-my.sharepoint.com/:f:/g/personal/hadarelor_tauex_tau_ac_il/Ej-L4PUWuf9Bpg4GNz2PffIByQfcVhiubBaO_WwLZ52QYw?e=2owToB). The code should be run in the following environment:
 
 Create a new conda env
 ```
