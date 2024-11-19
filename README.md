@@ -1,4 +1,12 @@
-# WAFFLE
+# WAFFLE: Multimodal Floorplan Understanding in the Wild
+
+This is the official repository of WAFFLE.
+> **_📝 TODO:_** link to arxiv and project page
+
+> **WAFFLE: Multimodal Floorplan Understanding in the Wild**<br>
+> Keren Ganon*, Morris Alper*, Rachel Mikulinsky, Hadar Averbuch-Elor<br>
+> Tel Aviv University<br>
+>\* Denotes equal contribution
 
 
 ## Dataset
