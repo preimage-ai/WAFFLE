@@ -1,7 +1,9 @@
 # WAFFLE: Multimodal Floorplan Understanding in the Wild
 
 This is the official repository of WAFFLE.
-> **_📝 TODO:_** link to arxiv and project page
+
+[[Project Website](https://tau-vailab.github.io/WAFFLE)]
+> **_📝 TODO:_** link to arxiv
 
 > **WAFFLE: Multimodal Floorplan Understanding in the Wild**<br>
 > Keren Ganon*, Morris Alper*, Rachel Mikulinsky, Hadar Averbuch-Elor<br>
@@ -52,9 +54,18 @@ The following fields exist in the `dataset.csv` data frame:
 
 ### Benchmark for Semantic Segmentation
 SVGs and PNGs can be found [here](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fdata%2Fbenchmark).
+
 ## Finetuned Models
 
-Finetuned models checkpoints can be found [here](https://tauex-my.sharepoint.com/:f:/g/personal/hadarelor_tauex_tau_ac_il/Ekk92mOOP8RJgLcAVphW918B_RFwh7Z5a5eDQpyXZSanVQ?e=tgUo5k), and helper inference code under `src/helpers`.
+Finetuned models checkpoints can be found [here](https://tauex-my.sharepoint.com/:f:/g/personal/hadarelor_tauex_tau_ac_il/Ekk92mOOP8RJgLcAVphW918B_RFwh7Z5a5eDQpyXZSanVQ?e=tgUo5k), and helper inference code under [`src/helpers`](https://github.com/TAU-VAILab/WAFFLE/tree/2c1527bc27a5a7d8285a6de1684f1dc391071c5d/src/helpers). Specifically:
+
+| Task                                   | Model | Helper class |
+| -------------------------------------- | ----- | ------------ |
+| Object detection for common layout components | [ft-DETR](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?ga=1&id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fmodels%2Fft%5Fdetr) | [`detr_inf.py`](https://github.com/TAU-VAILab/WAFFLE/blob/2c1527bc27a5a7d8285a6de1684f1dc391071c5d/src/helpers/detr_inf.py) |
+| Open-Vocabulary Floorplan Segmentation | [ft-CLIPSeg](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?ga=1&id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fmodels%2Fft%5Fclipseg) | [`clipseg_inf.py`](https://github.com/TAU-VAILab/WAFFLE/blob/2c1527bc27a5a7d8285a6de1684f1dc391071c5d/src/helpers/clipseg_inf.py) |
+| Text-Conditioned Floorplan Generation | [ft-stable-diffusion](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?ga=1&id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fmodels%2Fft%5Fstable%5Fdiffusion) | |
+| Structure-Conditioned Floorplan Generation | [ft-controlnet-floorplan-generation](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?ga=1&id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fmodels%2Fft%5Fcontrolnet%5Ffloorplan%5Fgeneration) | |
+| Wall Segmentation with a Diffusion Model | [ft-controlnet-wall-detection](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?ga=1&id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fmodels%2Fft%5Fcontrolnet%5Fwall%5Fdetection) | [`wall_detection_inf.py`](https://github.com/TAU-VAILab/WAFFLE/blob/2c1527bc27a5a7d8285a6de1684f1dc391071c5d/src/helpers/wall_detection_inf.py) |
 
 ## Code
 
@@ -71,3 +82,6 @@ Install the requirements
 pip install -r requirements.txt
 pip install -e src/
 ```
+## Citation
+
+If you find this code or our data helpful in your research or work, please cite the following paper.
