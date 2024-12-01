@@ -82,6 +82,11 @@ Install the requirements
 pip install -r requirements.txt
 pip install -e src/
 ```
+
+## Licence
+
+We release our code under the [Wikimedia Commons licence](https://commons.wikimedia.org/wiki/Commons:Licensing/en).
+
 ## Citation
 
 If you find this code or our data helpful in your research or work, please cite the following paper.
