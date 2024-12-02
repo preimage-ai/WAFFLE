@@ -93,7 +93,7 @@ If you find this code or our data helpful in your research or work, please cite 
 
 ```bibtex
 @InProceedings{kerenganon2024waffle,
- author={Keren Ganon, Morris Alper, Rachel Mikulinsky and Hadar Averbuch-Elor},
+ author={Keren Ganon and Morris Alper and Rachel Mikulinsky and Hadar Averbuch-Elor},
  title={WAFFLE: Multimodal Floorplan Understanding in the Wild},
  booktitle = {IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
  year={2025},
