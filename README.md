@@ -7,8 +7,8 @@ This is the official repository of WAFFLE.
 [[Project Website](https://tau-vailab.github.io/WAFFLE)]
 
 > **WAFFLE: Multimodal Floorplan Understanding in the Wild**<br>
-> Keren Ganon*, Morris Alper*, Rachel Mikulinsky, Hadar Averbuch-Elor<br>
-> Tel Aviv University<br>
+> Keren Ganon*<sup>1</sup>, Morris Alper*<sup>1</sup>, Rachel Mikulinsky<sup>1</sup>, Hadar Averbuch-Elor<sup>1,2</sup><br>
+> <sup>1</sup>Tel Aviv University, <sup>2</sup>Cornell University<br>
 >\* Denotes equal contribution
 
 
