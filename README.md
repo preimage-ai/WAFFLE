@@ -2,8 +2,9 @@
 
 This is the official repository of WAFFLE.
 
+[![arXiv](https://img.shields.io/badge/arXiv-2412.00955-b31b1b.svg)](https://arxiv.org/abs/2412.00955)
+
 [[Project Website](https://tau-vailab.github.io/WAFFLE)]
-> **_📝 TODO:_** link to arxiv
 
 > **WAFFLE: Multimodal Floorplan Understanding in the Wild**<br>
 > Keren Ganon*, Morris Alper*, Rachel Mikulinsky, Hadar Averbuch-Elor<br>
@@ -92,10 +93,13 @@ We release our code under the [Wikimedia Commons license](https://commons.wikime
 If you find this code or our data helpful in your research or work, please cite the following paper.
 
 ```bibtex
-@InProceedings{kerenganon2024waffle,
- author={Keren Ganon and Morris Alper and Rachel Mikulinsky and Hadar Averbuch-Elor},
- title={WAFFLE: Multimodal Floorplan Understanding in the Wild},
- booktitle = {IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
- year={2025},
+@misc{ganon2024wafflemultimodalfloorplanunderstanding,
+      title={WAFFLE: Multimodal Floorplan Understanding in the Wild}, 
+      author={Keren Ganon and Morris Alper and Rachel Mikulinsky and Hadar Averbuch-Elor},
+      year={2024},
+      eprint={2412.00955},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2412.00955},
 }
 ```
