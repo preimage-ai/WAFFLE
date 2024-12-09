@@ -54,7 +54,7 @@ The following fields exist in the `dataset.csv` data frame:
 * `grounded_legend_fn`: the relative path to where the grounded legends and architectural features are stored
 
 ### Benchmark for Semantic Segmentation
-SVGs and PNGs can be found [here](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fdata%2Fbenchmark).
+SVGs and PNGs can be found [here](https://tauex-my.sharepoint.com/personal/hadarelor_tauex_tau_ac_il/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fhadarelor%5Ftauex%5Ftau%5Fac%5Fil%2FDocuments%2FWAFFLE%2Fdata%2Fbenchmark). Follow the `README.md` file for more details on the benchmark folder contents.
 
 ## Finetuned Models
 
