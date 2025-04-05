@@ -3,6 +3,7 @@
 This is the official repository of WAFFLE.
 
 [![arXiv](https://img.shields.io/badge/arXiv-2412.00955-b31b1b.svg)](https://arxiv.org/abs/2412.00955)
+[![Generic badge](https://img.shields.io/badge/conf-WACV2025-purple.svg)](https://openaccess.thecvf.com/content/WACV2025/html/Ganon_WAFFLE_Multimodal_Floorplan_Understanding_in_the_Wild_WACV_2025_paper.html)
 
 [[Project Website](https://tau-vailab.github.io/WAFFLE)]
 
