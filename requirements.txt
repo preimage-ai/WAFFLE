@@ -23,8 +23,5 @@ seqeval
 simplejson
 tensorboard
 timm
-torch==1.13.1
-torchvision==0.14.1
-transformers==4.31
 # --upgrade diffusers[torch]
 # -U kaleido

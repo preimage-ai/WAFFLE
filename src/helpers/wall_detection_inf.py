@@ -33,7 +33,24 @@ class WallDetection:
             prompt,
             num_inference_steps=50,
             image=image,
-            height=512, width=512,
+            height=1024, width=1024,
+            controlnet_conditioning_scale=1.0,
+            guidance_scale=7.5,
+            generator=[torch.manual_seed(s) for s in range(num_images)],
+            num_images_per_prompt=num_images
+        )
+        # aggregate them to an average result
+        I = np.stack([np.asarray(img) for img in out.images]).mean(axis=0).mean(axis=-1)
+        I = np.uint8(I)
+        return Image.fromarray(np.uint8((I > 127) * 255))
+
+    def infer_pil(self, image, prompt='A floor plan', num_images=16):
+        # infer 16 samples
+        out = self.pipe(
+            prompt,
+            num_inference_steps=50,
+            image=image,
+            height=1024, width=1024,
             controlnet_conditioning_scale=1.0,
             guidance_scale=7.5,
             generator=[torch.manual_seed(s) for s in range(num_images)],
