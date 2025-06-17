@@ -213,14 +213,19 @@ def main():
     # fixed_edges = edge_map(fixed_bw)
     # moving_edges = edge_map(moving_bw)
 
-    dist = distance_transform(fixed_bw)
+    dist = 1 / (1+distance_transform(fixed_bw))
+    dist_min = 0
+    dist[:, 0] = dist_min
+    dist[:, -1] = dist_min
+    dist[0, :] = dist_min
+    dist[-1, :] = dist_min
     h, w = fixed_bw.shape
     cx, cy = w / 2.0, h / 2.0
 
     cv2.namedWindow("Chamfer Cost", cv2.WINDOW_NORMAL)
     cv2.namedWindow("Overlay Preview", cv2.WINDOW_NORMAL)
 
-    best = {"score": np.inf, "angle": 0.0, "scale": 1.0, "dx": 0, "dy": 0}
+    best = {"score": -np.inf, "angle": 0.0, "scale": 1.0, "dx": 0, "dy": 0}
 
     rot_angles = np.arange(args.rot_range[0], args.rot_range[1] + 1e-6, args.rot_step)
     scales = np.arange(args.scale_range[0], args.scale_range[1] + 1e-6, args.scale_step)
@@ -237,34 +242,34 @@ def main():
 
             # translation search via Chamfer convolution
             score_map = chamfer_score(dist, rotated)
-            min_val, _, min_loc, _ = cv2.minMaxLoc(score_map)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(score_map)
 
-            if min_val < best["score"]:
-                best.update(score=min_val, angle=ang, scale=s,
-                            dx=min_loc[0] - cx, dy=min_loc[1] - cy)
-            chamfers[s][ang] = min_val
+            if max_val >  best["score"]:
+                best.update(score=max_val, angle=ang, scale=s,
+                            dx=max_loc[0] - cx, dy=max_loc[1] - cy)
+            chamfers[s][ang] = max_val
             # ─── live visualisation ───
             cost_vis = cv2.normalize(score_map, None, 0, 255, cv2.NORM_MINMAX)
             cost_vis = cv2.applyColorMap(cost_vis.astype(np.uint8), cv2.COLORMAP_JET)
-            cv2.circle(cost_vis, min_loc, 4, (0, 0, 255), -1)
+            cv2.circle(cost_vis, max_loc, 4, (0, 0, 255), -1)
             cv2.putText(cost_vis, f"rot {ang:.1f}  s {s:.3f}", (10, 25),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 1,
                         cv2.LINE_AA)
             cv2.imshow("Chamfer Cost", cost_vis)
 
             M_tmp = M_rs.copy()
-            M_tmp[0, 2] += min_loc[0] - cx
-            M_tmp[1, 2] += min_loc[1] - cy
+            M_tmp[0, 2] += max_loc[0] - cx
+            M_tmp[1, 2] += max_loc[1] - cy
             warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
                                          flags=cv2.INTER_NEAREST,
                                          borderMode=cv2.BORDER_CONSTANT, borderValue=0)
             dist_uint = (dist * 255 / dist.max()).astype(np.uint8)
             overlay = cv2.applyColorMap(dist_uint, cv2.COLORMAP_TURBO)
-            overlay
+            overlay[fixed_bw > 0] = (0, 0, 0) 
             # cnt, _ = cv2.findContours(warped_edge, cv2.RETR_EXTERNAL,
             #                           cv2.CHAIN_APPROX_SIMPLE)
             # cv2.drawContours(overlay, cnt, -1, (0, 255, 0), 1)
-            overlay[warped_edge > 0] = (0, 255, 0)
+            overlay[warped_edge > 0] = (0, 0, 255)
             cv2.imshow("Overlay Preview", overlay)
 
             # if s > 0.95 and s<1.05 and 
@@ -281,11 +286,71 @@ def main():
             continue
         break  # inner loop broke via 'q'
     
-    for s_ in chamfers.keys():
-        angs = np.array(list(chamfers[s_].keys()))
-        chamfs = np.array(list(chamfers[s_].values()))
-        plt.plot(angs, chamfs)
-    plt.show()
+    fig, ax = plt.subplots()
+    artist_scale_dict = {}
+    for s_, chdict in chamfers.items():                    # draw every scale as points
+        angs   = np.fromiter(chdict.keys(), dtype=float)
+        costs  = np.fromiter((v[0] if isinstance(v, tuple) else v   # v = (cost, loc)
+                            for v in chdict.values()), dtype=float)
+        artist = ax.scatter(angs, costs, s=20, label=f"s={s_:0.2f}", picker=True)
+        artist_scale_dict[artist] = s_
+    ax.set_xlabel("Rotation angle (°)")
+    ax.set_ylabel("Chamfer cost")
+    ax.legend()
+    fig.tight_layout()
+
+
+    # -----  interactive callback ----------------------------------------------------
+    def on_click(event):
+        """Callback: user clicks anywhere on the plot → show overlay for nearest pt."""
+
+        s = artist_scale_dict[event.artist]
+        ang = list(chamfers[s].keys())[event.ind[0]]
+        # single warp that includes *both* rotation and scale
+        M_rs = cv2.getRotationMatrix2D((cx, cy), ang, s)
+        rotated = cv2.warpAffine(moving_bw, M_rs, (w, h),
+                                    flags=cv2.INTER_NEAREST,
+                                    borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+        # translation search via Chamfer convolution
+        score_map = chamfer_score(dist, rotated)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(score_map)
+
+        chamfers[s][ang] = max_val
+        # ─── live visualisation ───
+        cost_vis = cv2.normalize(score_map, None, 0, 255, cv2.NORM_MINMAX)
+        cost_vis = cv2.applyColorMap(cost_vis.astype(np.uint8), cv2.COLORMAP_JET)
+        cv2.circle(cost_vis, max_loc, 4, (0, 0, 255), -1)
+        cv2.putText(cost_vis, f"rot {ang:.1f}  s {s:.3f}", (10, 25),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 1,
+                    cv2.LINE_AA)
+        cv2.imshow("Chamfer Cost", cost_vis)
+
+        M_tmp = M_rs.copy()
+        M_tmp[0, 2] += max_loc[0] - cx
+        M_tmp[1, 2] += max_loc[1] - cy
+        warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
+                                        flags=cv2.INTER_NEAREST,
+                                        borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        dist_uint = (dist * 255 / dist.max()).astype(np.uint8)
+        overlay = cv2.applyColorMap(dist_uint, cv2.COLORMAP_TURBO)
+        overlay[fixed_bw > 0] = (0, 0, 0)
+        # cnt, _ = cv2.findContours(warped_edge, cv2.RETR_EXTERNAL,
+        #                           cv2.CHAIN_APPROX_SIMPLE)
+        # cv2.drawContours(overlay, cnt, -1, (0, 255, 0), 1)
+        overlay[warped_edge > 0] = (0, 0, 255)
+        cv2.imshow("Overlay Preview", overlay)
+        cv2.waitKey(1)
+        print(f"[click angle={ang:.1f}  scale={s:.3f}  cost={max_val:.0f}")
+
+    # connect callback ↔︎ figure
+    cid = fig.canvas.mpl_connect('pick_event', on_click)     # :contentReference[oaicite:2]{index=2}
+    plt.show()                                            # keep UI reactive
+    # plt.pause(0.001) 
+    # ------------------------------------------------------------------------------
+
+    # while cv2.waitKey(1) != 27:      # 4. keep the program running
+    #     pass
 
 
     print("\n>>> Best pose found")
@@ -295,6 +360,7 @@ def main():
     print(f"   Chamfer cost : {best['score']:.0f}")
 
     # final warp
+    # fac = args.mpp / mpp_fixed
     M_final = cv2.getRotationMatrix2D((cx, cy), best['angle'], best['scale'])
     M_final[0, 2] += best['dx']
     M_final[1, 2] += best['dy']
@@ -306,7 +372,6 @@ def main():
     print(f"Aligned mask written → {args.out}")
 
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     main()
