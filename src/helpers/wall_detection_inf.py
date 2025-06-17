@@ -50,7 +50,7 @@ class WallDetection:
             prompt,
             num_inference_steps=50,
             image=image,
-            height=1024, width=1024,
+            height=1536, width=1536,
             controlnet_conditioning_scale=1.0,
             guidance_scale=7.5,
             generator=[torch.manual_seed(s) for s in range(num_images)],
