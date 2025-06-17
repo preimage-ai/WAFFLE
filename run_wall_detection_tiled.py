@@ -11,9 +11,62 @@ import argparse, math, os, tempfile
 from tqdm import tqdm
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageFilter
 from src.helpers.wall_detection_inf import WallDetection
 from pathlib import Path
+from skimage.morphology import skeletonize
+import cv2
+
+def crop_to_content(img: np.ndarray,
+                    bg_threshold=1,
+                    padding=0):
+    """
+    GIMP-style “Crop to content” with optional padding.
+
+    Parameters
+    ----------
+    img          : BGR[A] image loaded with cv2.imread(...)
+    bg_threshold : int/float · 0–255 (or 0–1 for float images)
+    padding      : int  or  (top, right, bottom, left)
+
+    Returns
+    -------
+    cropped : np.ndarray
+    bbox    : tuple[int, int, int, int]   # (x, y, w, h) in original coords
+    """
+
+    h, w = img.shape[:2]
+
+    # ---------- Build foreground mask ----------
+    if img.shape[2] == 4:                       # 1) via alpha if present
+        mask = img[:, :, 3] > bg_threshold
+    else:                                       # 2) via colour diff vs corner
+        bg_color = img[0:4, 0:4].reshape(-1, 3).mean(0)  # avg of 4×4 px corner
+        diff = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.int16)
+        bg_luma = int(np.dot(bg_color, [0.114, 0.587, 0.299]))
+        mask = np.abs(diff - bg_luma) > bg_threshold
+
+    if not mask.any():                          # empty → nothing to crop
+        return img.copy(), (0, 0, w, h)
+
+    # ---------- Tight bounding rectangle ----------
+    ys, xs = np.where(mask)
+    y0, y1 = ys.min(), ys.max() + 1
+    x0, x1 = xs.min(), xs.max() + 1
+
+    # ---------- Handle padding ----------
+    if isinstance(padding, int):
+        top = right = bottom = left = padding
+    else:                                       # assume len==4
+        top, right, bottom, left = padding
+
+    y0 = max(0, y0 - top)
+    x0 = max(0, x0 - left)
+    y1 = min(h, y1 + bottom)
+    x1 = min(w, x1 + right)
+
+    cropped = img[y0:y1, x0:x1].copy()
+    return cropped, (x0, y0, x1 - x0, y1 - y0)
 
 # ---------- CLI ----------
 def get_args():
@@ -59,9 +112,37 @@ def sliding_windows(w_px, h_px, tile_px, stride_px):
 def infer_tile(detector, pil_img, num_images):
     """Run ControlNet inference on a PIL image tile and return a float32 mask array."""
     mask = detector.infer_pil(image=pil_img, num_images=num_images)
-    mask = mask.resize(pil_img.size, Image.Resampling.BILINEAR)
-    mask = np.array(mask)
-    return mask.astype(np.float32)
+    import matplotlib.pyplot as plt
+    # plt.imshow(np.asarray(mask))
+    # plt.show()
+    mask_dilated = mask.filter(ImageFilter.MaxFilter(size=3))  # dilate to fill gaps
+    # plt.imshow(np.asarray(mask_dilated))
+    # plt.show()
+    mask_eroded = mask_dilated.filter(ImageFilter.MinFilter(size=3))  # erode to remove noise
+    mask_eroded_max = mask_eroded.filter(ImageFilter.MinFilter(size=5)).filter(ImageFilter.MinFilter(size=5)).filter(ImageFilter.MinFilter(size=5))
+    # plt.imshow(np.asarray(mask_eroded))
+    # plt.show()
+    # mask = mask_eroded.resize(pil_img.size, Image.Resampling.BILINEAR)
+    mask = np.array(mask_eroded)
+    mask = 255 - mask  # invert: white walls (255) on black bg (0)
+    # 3. “Line-likeness” of the mask
+    skel = skeletonize((255-np.array(mask_eroded_max)) > 0)
+    # dist_img = cv2.distanceTransform(1 - skel.astype(np.uint8), cv2.DIST_L2, 5, dstType=cv2.CV_32F)
+    dist_img = cv2.distanceTransform(1-(skel > 0).astype(np.uint8), cv2.DIST_L2, 5, dstType=cv2.CV_32F)
+    # 4. Chamfer score of mask in distance transform space
+    # mask_dist = dist_img[mask > 0]
+    mean_mask_dist = dist_img[mask > 0].sum() / skel.sum()  if skel.sum() > 0 else 0.0
+    mask = cv2.resize(mask, pil_img.size, interpolation=cv2.INTER_LINEAR)
+    # cv2.imshow("Test", mask.astype(np.uint8) * 255)
+    # cv2.waitKey(0)
+    # plt.imshow(dist_img)
+    # plt.show()
+    # plt.imshow(mask_eroded_max)
+    # plt.show()
+    if mean_mask_dist < 60:
+        return mask.astype(np.float32), mean_mask_dist  # return as is if it looks like a wall
+    else:
+        return np.zeros_like(mask, dtype=np.float32), 0  # return empty mask if not wall-like
 
 
 # ---------- main ----------
@@ -82,19 +163,25 @@ def main():
     acc = np.zeros((H, W), dtype=np.float32)
     wmap = np.zeros((H, W), dtype=np.float32)
 
+    trimmed, box = crop_to_content(np.asarray(im_full), padding=int(0.1 * min(H, W)))
+
     detector = WallDetection(ckpt_path=args.ckpt_path)
     detector.pipe.to(device)
 
-    windows = list(sliding_windows(W, H, tile_px, stride_px))
+    w, h = box[2], box[3]
+    bx, by = box[0], box[1]
+
+    windows = list(sliding_windows(w, h, tile_px, stride_px))
     for (x0, y0, x1, y1) in tqdm(windows, desc="Tiled inference"):
+        x0, y0, x1, y1 = bx + x0, by + y0, bx + x1, by + y1
         tile_img = im_full.crop((x0, y0, x1, y1))
-        m = infer_tile(detector, tile_img, args.num_images)
+        m, mean_mask_dist = infer_tile(detector, tile_img, args.num_images)
         tile_vis = np.zeros_like(acc)
         tile_vis[y0:y1, x0:x1] = m[: y1 - y0, : x1 - x0]
-        tile_vis = 255 - tile_vis
         tile_vis = Image.fromarray(tile_vis.astype(np.uint8), mode="L")
         tile_vis.save(f"{args.output[:-4]}_tile_{x0}_{y0}.png")
-        acc[y0:y1, x0:x1] += 255 - m[: y1 - y0, : x1 - x0]
+        print (f"Tile ({x0}, {y0}) mean_mask_dist: {mean_mask_dist:.4f}")
+        acc[y0:y1, x0:x1] += m[: y1 - y0, : x1 - x0]
         wmap[y0:y1, x0:x1] += 1.0
 
     # merged = np.where(wmap > 0, acc / wmap, 0).astype(np.uint8)
