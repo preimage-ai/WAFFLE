@@ -15,6 +15,7 @@ import numpy as np
 from tqdm import tqdm
 import open3d as o3d
 import matplotlib.pyplot as plt
+from scipy.spatial.transform import Rotation as R
 
 # ──────────────── helpers ────────────────
 def load_binary(path: Path) -> np.ndarray:
@@ -82,8 +83,15 @@ def render_pointcloud(cloud_path: str,
     # ------------------------------------------------------------
     pcd = o3d.t.io.read_point_cloud(cloud_path)          # Open3D I/O  :contentReference[oaicite:0]{index=0}
     seg = pcd.point.seg.numpy().reshape(-1)
+    normals = pcd.point.normals.numpy()
+    
+    mask = np.ones_like(seg).astype(np.bool_)
+    mask = np.logical_and(mask, np.logical_or(seg == 0, seg == 1, seg == 32))
+    mask = np.logical_and(mask, np.abs(normals[:, 2]) < 0.3)
+    
     pcd = o3d.io.read_point_cloud(cloud_path)
-    pts = np.asarray(pcd.points)[seg == 0]
+    # pcd.rotate(np.asarray(R.from_euler('x', 90, degrees=True).as_matrix()))
+    pts = np.asarray(pcd.points)[mask]
     pcd.points = o3d.utility.Vector3dVector(pts)
     if pts.size == 0:
         raise ValueError("Point cloud is empty!")
@@ -117,7 +125,7 @@ def render_pointcloud(cloud_path: str,
     # ------------------------------------------------------------
     # 3.1 Renderer & scene
     renderer = o3d.visualization.rendering.OffscreenRenderer(width_px,
-                                                             height_px)  # :contentReference[oaicite:1]{index=1}
+                                                             height_px) 
     scene = renderer.scene
     scene.set_background(background)
 
@@ -137,13 +145,13 @@ def render_pointcloud(cloud_path: str,
     cam.set_projection(o3d.visualization.rendering.Camera.Projection.Ortho,
                        -extent_xy[0]/2, extent_xy[0]/2,
                        -extent_xy[1]/2, extent_xy[1]/2,
-                       0.1, bbox.get_extent()[2]*4)       # :contentReference[oaicite:2]{index=2}
-    cam.look_at(centre, eye, up)                       # :contentReference[oaicite:3]{index=3}
+                       0.1, bbox.get_extent()[2]*4)   
+    cam.look_at(centre, eye, up)                  
 
     # ------------------------------------------------------------
     # 4. Render
     # ------------------------------------------------------------
-    img_o3d = renderer.render_to_image()               # :contentReference[oaicite:4]{index=4}
+    img_o3d = renderer.render_to_image()               
     img_np = np.asarray(img_o3d)                       # uint8 RGBA
 
     # optional disk write
@@ -199,12 +207,20 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     # fixed_edges = edge_map(fixed_bw)
     # moving_edges = edge_map(moving_bw)
 
-    dist = 1 / (1+distance_transform(fixed_bw))
+    recall_dist = 1 / (1+distance_transform(fixed_bw))
     dist_min = 0
-    dist[:, 0] = dist_min
-    dist[:, -1] = dist_min
-    dist[0, :] = dist_min
-    dist[-1, :] = dist_min
+    recall_dist[:, 0] = dist_min
+    recall_dist[:, -1] = dist_min
+    recall_dist[0, :] = dist_min
+    recall_dist[-1, :] = dist_min
+
+    accuracy_dist = distance_transform(fixed_bw)
+    dist_max = accuracy_dist.max()
+    accuracy_dist[:, 0] = dist_max
+    accuracy_dist[:, -1] = dist_max
+    accuracy_dist[0, :] = dist_max
+    accuracy_dist[-1, :] = dist_max
+
     h, w = fixed_bw.shape
     cx, cy = w / 2.0, h / 2.0
 
@@ -227,7 +243,10 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
                                      borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
             # translation search via Chamfer convolution
-            score_map = chamfer_score(dist, rotated)
+            recall_score_map = chamfer_score(recall_dist, rotated)
+            accuracy_score_map = chamfer_score(accuracy_dist, rotated)
+            score_map = recall_score_map / (accuracy_score_map + 1e-9) ** (1/3)
+            score_map[accuracy_score_map < 1] = 0  # in case accuracy score map randomly give a very small value
             min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(score_map)
 
             if max_val >  best["score"]:
@@ -243,13 +262,17 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
                         cv2.LINE_AA)
             cv2.imshow("Chamfer Cost", cost_vis)
 
+            # if ang > -84.5 and ang < 84.5 and s > 1.35 and s < 1.45:
+            #     breakpoint()
+            #     cv2.waitKey(0)  # pause for inspection
+
             M_tmp = M_rs.copy()
             M_tmp[0, 2] += max_loc[0] - cx
             M_tmp[1, 2] += max_loc[1] - cy
             warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
                                          flags=cv2.INTER_NEAREST,
                                          borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-            dist_uint = (dist * 255 / dist.max()).astype(np.uint8)
+            dist_uint = (recall_dist * 255 / recall_dist.max()).astype(np.uint8)
             overlay = cv2.applyColorMap(dist_uint, cv2.COLORMAP_TURBO)
             overlay[fixed_bw > 0] = (0, 0, 0) 
             # cnt, _ = cv2.findContours(warped_edge, cv2.RETR_EXTERNAL,
@@ -299,7 +322,10 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
                                     borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
         # translation search via Chamfer convolution
-        score_map = chamfer_score(dist, rotated)
+        recall_score_map = chamfer_score(recall_dist, rotated)
+        accuracy_score_map = chamfer_score(accuracy_dist, rotated)
+        # score_map = recall_score_map / (accuracy_score_map + 1e-9)
+        score_map = recall_score_map / (accuracy_score_map + 1e-9) ** (1/3)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(score_map)
 
         chamfers[s][ang] = max_val
@@ -318,7 +344,7 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
                                         flags=cv2.INTER_NEAREST,
                                         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-        dist_uint = (dist * 255 / dist.max()).astype(np.uint8)
+        dist_uint = (recall_dist * 255 / recall_dist.max()).astype(np.uint8)
         overlay = cv2.applyColorMap(dist_uint, cv2.COLORMAP_TURBO)
         overlay[fixed_bw > 0] = (0, 0, 0)
         # cnt, _ = cv2.findContours(warped_edge, cv2.RETR_EXTERNAL,
@@ -346,10 +372,14 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     print(f"   Chamfer cost : {best['score']:.0f}")
 
     # final warp
-    # fac = args.mpp / mpp_fixed
+    fac = mpp_fixed / args_mpp
     M_final = cv2.getRotationMatrix2D((cx, cy), best['angle'], best['scale'])
     M_final[0, 2] += best['dx']
     M_final[1, 2] += best['dy']
+
+    # M_final[0, 2] *= fac
+    # M_final[1, 2] *= fac
+
     aligned = cv2.warpAffine(moving_bw * 255, M_final, (w, h),
                              flags=cv2.INTER_NEAREST,
                              borderMode=cv2.BORDER_CONSTANT, borderValue=0)
