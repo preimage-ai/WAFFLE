@@ -96,6 +96,8 @@ def sliding_windows(w_px, h_px, tile_px, stride_px):
     """Yield (x0, y0, x1, y1) boxes covering an image of size (w_px, h_px)."""
     nx = math.ceil((w_px - tile_px) / stride_px) + 1
     ny = math.ceil((h_px - tile_px) / stride_px) + 1
+    nx, ny = max(1, nx), max(1, ny)  # at least one tile in each direction
+    print (f"Sliding windows: {nx} x {ny} = {nx * ny} tiles")
     for iy in range(ny):
         for ix in range(nx):
             x0 = int(ix * stride_px)
@@ -170,6 +172,8 @@ def main():
 
     w, h = box[2], box[3]
     bx, by = box[0], box[1]
+
+    print (f"Running tiled inference on {W}x{H} image with {tile_px}px tiles and {args.overlap*100:.0f}% overlap... with stride {stride_px}px")
 
     windows = list(sliding_windows(w, h, tile_px, stride_px))
     for (x0, y0, x1, y1) in tqdm(windows, desc="Tiled inference"):
