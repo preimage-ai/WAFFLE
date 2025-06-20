@@ -175,29 +175,15 @@ def downscale_img(img, mpp, side=512):
     return img_resized, mpp_new
 
 # ──────────────── main ────────────────
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--fixed", required=True, type=Path)
-    ap.add_argument("--mpp", required=True, type=float)
-    ap.add_argument("--cloud", required=True, type=Path)
-    ap.add_argument("--rot-range", nargs=2, type=float, default=(-180, 180),
-                    metavar=("MIN_DEG", "MAX_DEG"))
-    ap.add_argument("--rot-step", type=float, default=1.0)
-    ap.add_argument("--scale-range", nargs=2, type=float, default=(0.8, 1.4),
-                    metavar=("SMIN", "SMAX"),
-                    help="uniform scale factors to scan (default 0.95 1.05)")
-    ap.add_argument("--scale-step", type=float, default=0.02)
-    ap.add_argument("--out", default="aligned_cloud.png", type=Path)
-    args = ap.parse_args()
-
+def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 180), rot_step = 1.0, scale_range = (0.8, 1.4), scale_step = 0.02):
     mpp = 0.05
-    moving_bw, cam_info = render_pointcloud(args.cloud, mpp, out_path="test.png")
+    moving_bw, cam_info = render_pointcloud(cloud, mpp, out_path="test.png")
     # import matplotlib.pyplot as plt
     # plt.imshow(moving_bw)
     # plt.show()
 
-    fixed_bw = load_binary(args.fixed)
-    fixed_bw, mpp_fixed = downscale_img(fixed_bw, mpp=args.mpp)
+    fixed_bw = load_binary(fixed)
+    fixed_bw, mpp_fixed = downscale_img(fixed_bw, mpp=args_mpp)
     # moving_bw = load_binary(args.moving)
 
     fac = mpp / mpp_fixed
@@ -227,8 +213,8 @@ def main():
 
     best = {"score": -np.inf, "angle": 0.0, "scale": 1.0, "dx": 0, "dy": 0}
 
-    rot_angles = np.arange(args.rot_range[0], args.rot_range[1] + 1e-6, args.rot_step)
-    scales = np.arange(args.scale_range[0], args.scale_range[1] + 1e-6, args.scale_step)
+    rot_angles = np.arange(rot_range[0], rot_range[1] + 1e-6, rot_step)
+    scales = np.arange(scale_range[0], scale_range[1] + 1e-6, scale_step)
 
     chamfers = {}
     for s in tqdm(scales, desc="scale loop"):
@@ -364,14 +350,30 @@ def main():
     M_final = cv2.getRotationMatrix2D((cx, cy), best['angle'], best['scale'])
     M_final[0, 2] += best['dx']
     M_final[1, 2] += best['dy']
-
     aligned = cv2.warpAffine(moving_bw * 255, M_final, (w, h),
                              flags=cv2.INTER_NEAREST,
                              borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    cv2.destroyAllWindows()
+    return M_final, aligned
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fixed", required=True, type=Path)
+    ap.add_argument("--mpp", required=True, type=float)
+    ap.add_argument("--cloud", required=True, type=Path)
+    ap.add_argument("--rot-range", nargs=2, type=float, default=(-180, 180),
+                    metavar=("MIN_DEG", "MAX_DEG"))
+    ap.add_argument("--rot-step", type=float, default=1.0)
+    ap.add_argument("--scale-range", nargs=2, type=float, default=(0.8, 1.4),
+                    metavar=("SMIN", "SMAX"),
+                    help="uniform scale factors to scan (default 0.95 1.05)")
+    ap.add_argument("--scale-step", type=float, default=0.02)
+    ap.add_argument("--out", default="aligned_cloud.png", type=Path)
+    args = ap.parse_args()
+
+    M_final, aligned = align_cloud(args.fixed, args.mpp, args.cloud, 
+                        rot_range=args.rot_range, rot_step=args.rot_step,
+                        scale_range=args.scale_range, scale_step=args.scale_step)
     cv2.imwrite(str(args.out), aligned)
     print(f"Aligned mask written → {args.out}")
 
-    cv2.destroyAllWindows()
-
-if __name__ == "__main__":
-    main()
