@@ -391,8 +391,8 @@ def main():
     M_final[0, 2] += best['dx']
     M_final[1, 2] += best['dy']
 
-    M_final[0, 2] *= fac
-    M_final[1, 2] *= fac
+    # M_final[0, 2] *= fac
+    # M_final[1, 2] *= fac
 
     aligned = cv2.warpAffine(moving_bw * 255, M_final, (w, h),
                              flags=cv2.INTER_NEAREST,
