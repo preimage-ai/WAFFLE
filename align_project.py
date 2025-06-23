@@ -28,8 +28,8 @@ def align_project(proj_dir: Path):
     
     # Create wall map 
     waffle_mask_path = proj_dir / "floorplan" / "wall_mask_waffle.png"
-    get_wall_mask(floorplan_path, waffle_mask_path, align_info["mpp"])
-    final_transform_3D, aligned_img = align_cloud(waffle_mask_path, align_info["mpp"], cloud_path)
+    get_wall_mask(floorplan_path, waffle_mask_path, align_info["mpp"], tile_m=75.0, overlap=0.3, num_images=1, ckpt_path="checkpoints/checkpoint-200000/controlnet")
+    final_transform_3D, aligned_img = align_cloud(waffle_mask_path, align_info["mpp"], cloud_path, debug=False)
     cv2.imwrite(str(aligned_floorplan_path), aligned_img)
     align_info["scan_to_floorplan"] = final_transform_3D.tolist()  # Convert to list for JSON serialization
 
