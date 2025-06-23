@@ -170,9 +170,9 @@ def render_pointcloud(cloud_path: str,
                     up=up.tolist())
     
     _, bw = cv2.threshold(img_np.mean(axis=-1).astype(np.uint8), 0, 1, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-    import matplotlib.pyplot as plt
-    plt.imshow(bw)
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # plt.imshow(bw)
+    # plt.show()
 
     transform_mat = np.eye(4, dtype=np.float32)
     shift_x = center[0] - extent_xy[0]/2
@@ -197,7 +197,7 @@ def downscale_img(img, mpp, side=512):
     return img_resized, mpp_new
 
 # ──────────────── main ────────────────
-def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 180), rot_step = 1.0, scale_range = (0.8, 1.4), scale_step = 0.02):
+def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 180), rot_step = 1.0, scale_range = (0.8, 1.4), scale_step = 0.02, debug=False):
     mpp = 0.05
     moving_bw, cam_info, cloud_shift = render_pointcloud(cloud, mpp, out_path="test.png")
     # import matplotlib.pyplot as plt
@@ -219,9 +219,10 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     cloud_shift = scaling_mat @ cloud_shift  # scale cloud-to-img transform matrix
 
     print ("mpp", mpp)
-    cv2.namedWindow("tst", cv2.WINDOW_NORMAL)
-    cv2.imshow("tst", (moving_bw * 255).astype(np.uint8))
-    cv2.waitKey(0)
+    if debug:
+        cv2.namedWindow("tst", cv2.WINDOW_NORMAL)
+        cv2.imshow("tst", (moving_bw * 255).astype(np.uint8))
+        cv2.waitKey(0)
 
     # fixed_edges = edge_map(fixed_bw)
     # moving_edges = edge_map(moving_bw)
@@ -243,8 +244,9 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     h, w = fixed_bw.shape
     cx, cy = w / 2.0, h / 2.0
 
-    cv2.namedWindow("Chamfer Cost", cv2.WINDOW_NORMAL)
-    cv2.namedWindow("Overlay Preview", cv2.WINDOW_NORMAL)
+    if debug:
+        cv2.namedWindow("Chamfer Cost", cv2.WINDOW_NORMAL)
+        cv2.namedWindow("Overlay Preview", cv2.WINDOW_NORMAL)
 
     best = {"score": -np.inf, "angle": 0.0, "scale": 1.0, "dx": 0, "dy": 0}
 
@@ -273,59 +275,61 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
                             dx=max_loc[0] - cx, dy=max_loc[1] - cy)
             chamfers[s][ang] = max_val
             # ─── live visualisation ───
-            cost_vis = cv2.normalize(score_map, None, 0, 255, cv2.NORM_MINMAX)
-            cost_vis = cv2.applyColorMap(cost_vis.astype(np.uint8), cv2.COLORMAP_JET)
-            cv2.circle(cost_vis, max_loc, 4, (0, 0, 255), -1)
-            cv2.putText(cost_vis, f"rot {ang:.1f}  s {s:.3f}", (10, 25),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 1,
-                        cv2.LINE_AA)
-            cv2.imshow("Chamfer Cost", cost_vis)
+            if debug:
+                cost_vis = cv2.normalize(score_map, None, 0, 255, cv2.NORM_MINMAX)
+                cost_vis = cv2.applyColorMap(cost_vis.astype(np.uint8), cv2.COLORMAP_JET)
+                cv2.circle(cost_vis, max_loc, 4, (0, 0, 255), -1)
+                cv2.putText(cost_vis, f"rot {ang:.1f}  s {s:.3f}", (10, 25),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 1,
+                            cv2.LINE_AA)
+                cv2.imshow("Chamfer Cost", cost_vis)
 
-            # if ang > -84.5 and ang < 84.5 and s > 1.35 and s < 1.45:
-            #     breakpoint()
-            #     cv2.waitKey(0)  # pause for inspection
+                # if ang > -84.5 and ang < 84.5 and s > 1.35 and s < 1.45:
+                #     breakpoint()
+                #     cv2.waitKey(0)  # pause for inspection
 
-            M_tmp = M_rs.copy()
-            M_tmp[0, 2] += max_loc[0] - cx
-            M_tmp[1, 2] += max_loc[1] - cy
-            warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
-                                         flags=cv2.INTER_NEAREST,
-                                         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-            dist_uint = (recall_dist * 255 / recall_dist.max()).astype(np.uint8)
-            overlay = cv2.applyColorMap(dist_uint, cv2.COLORMAP_TURBO)
-            overlay[fixed_bw > 0] = (0, 0, 0) 
-            # cnt, _ = cv2.findContours(warped_edge, cv2.RETR_EXTERNAL,
-            #                           cv2.CHAIN_APPROX_SIMPLE)
-            # cv2.drawContours(overlay, cnt, -1, (0, 255, 0), 1)
-            overlay[warped_edge > 0] = (0, 0, 255)
-            cv2.imshow("Overlay Preview", overlay)
+                M_tmp = M_rs.copy()
+                M_tmp[0, 2] += max_loc[0] - cx
+                M_tmp[1, 2] += max_loc[1] - cy
+                warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
+                                            flags=cv2.INTER_NEAREST,
+                                            borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+                dist_uint = (recall_dist * 255 / recall_dist.max()).astype(np.uint8)
+                overlay = cv2.applyColorMap(dist_uint, cv2.COLORMAP_TURBO)
+                overlay[fixed_bw > 0] = (0, 0, 0) 
+                # cnt, _ = cv2.findContours(warped_edge, cv2.RETR_EXTERNAL,
+                #                           cv2.CHAIN_APPROX_SIMPLE)
+                # cv2.drawContours(overlay, cnt, -1, (0, 255, 0), 1)
+                overlay[warped_edge > 0] = (0, 0, 255)
+                cv2.imshow("Overlay Preview", overlay)
 
-            # if s > 0.95 and s<1.05 and 
-            # if ang >= -10.0 and ang <= 10.0:
-            #     print (f"Angle: {ang},     Chamfer: {min_val    }")
-            #     cv2.waitKey(0)  # pause for inspection
+                # if s > 0.95 and s<1.05 and 
+                # if ang >= -10.0 and ang <= 10.0:
+                #     print (f"Angle: {ang},     Chamfer: {min_val    }")
+                #     cv2.waitKey(0)  # pause for inspection
                 
-            k = cv2.waitKey(1) & 0xFF
-            if k in {ord('q'), 27}:
-                print("\nAbort requested – keeping current best.")
-                scales = []      # break outer loop
-                break
+                k = cv2.waitKey(1) & 0xFF
+                if k in {ord('q'), 27}:
+                    print("\nAbort requested – keeping current best.")
+                    scales = []      # break outer loop
+                    break
         else:
             continue
         break  # inner loop broke via 'q'
     
-    fig, ax = plt.subplots()
-    artist_scale_dict = {}
-    for s_, chdict in chamfers.items():                    # draw every scale as points
-        angs   = np.fromiter(chdict.keys(), dtype=float)
-        costs  = np.fromiter((v[0] if isinstance(v, tuple) else v   # v = (cost, loc)
-                            for v in chdict.values()), dtype=float)
-        artist = ax.scatter(angs, costs, s=20, label=f"s={s_:0.2f}", picker=True)
-        artist_scale_dict[artist] = s_
-    ax.set_xlabel("Rotation angle (°)")
-    ax.set_ylabel("Chamfer cost")
-    ax.legend()
-    fig.tight_layout()
+    if debug:
+        fig, ax = plt.subplots()
+        artist_scale_dict = {}
+        for s_, chdict in chamfers.items():                    # draw every scale as points
+            angs   = np.fromiter(chdict.keys(), dtype=float)
+            costs  = np.fromiter((v[0] if isinstance(v, tuple) else v   # v = (cost, loc)
+                                for v in chdict.values()), dtype=float)
+            artist = ax.scatter(angs, costs, s=20, label=f"s={s_:0.2f}", picker=True)
+            artist_scale_dict[artist] = s_
+        ax.set_xlabel("Rotation angle (°)")
+        ax.set_ylabel("Chamfer cost")
+        ax.legend()
+        fig.tight_layout()
 
 
     # -----  interactive callback ----------------------------------------------------
@@ -375,8 +379,9 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         print(f"[click angle={ang:.1f}  scale={s:.3f}  cost={max_val:.0f}")
 
     # connect callback ↔︎ figure
-    cid = fig.canvas.mpl_connect('pick_event', on_click)     # :contentReference[oaicite:2]{index=2}
-    plt.show()                                            # keep UI reactive
+    if debug:
+        cid = fig.canvas.mpl_connect('pick_event', on_click)     # :contentReference[oaicite:2]{index=2}
+        plt.show()                                            # keep UI reactive
 
 
     print("\n>>> Best pose found")
@@ -404,7 +409,8 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     y_inv[:3, :3] = y_inv[:3, :3] * mpp_fixed
     M_cloud = y_inv @ M_cloud
 
-    cv2.destroyAllWindows()
+    if debug:
+        cv2.destroyAllWindows()
     return M_cloud, aligned
 
 if __name__ == "__main__":
@@ -424,7 +430,7 @@ if __name__ == "__main__":
 
     M_final, aligned = align_cloud(args.fixed, args.mpp, args.cloud, 
                         rot_range=args.rot_range, rot_step=args.rot_step,
-                        scale_range=args.scale_range, scale_step=args.scale_step)
+                        scale_range=args.scale_range, scale_step=args.scale_step, debug=True)
     cv2.imwrite(str(args.out), aligned)
     print(f"Aligned mask written → {args.out}")
 
