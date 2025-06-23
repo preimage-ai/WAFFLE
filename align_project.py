@@ -1,4 +1,5 @@
 from align_cloud import align_cloud
+from run_wall_detection_tiled import get_wall_mask
 import argparse
 from pathlib import Path
 import json
@@ -25,7 +26,10 @@ def align_project(proj_dir: Path):
         print("Pipeline hasn't run yet, so no point cloud to align with floorplan.")
         raise FileNotFoundError(f"Point cloud file {cloud_path} does not exist.")
     
-    final_transform_3D, aligned_img = align_cloud(floorplan_path, align_info["mpp"], cloud_path)
+    # Create wall map 
+    waffle_mask_path = proj_dir / "floorplan" / "wall_mask_waffle.png"
+    get_wall_mask(floorplan_path, waffle_mask_path, align_info["mpp"])
+    final_transform_3D, aligned_img = align_cloud(waffle_mask_path, align_info["mpp"], cloud_path)
     cv2.imwrite(str(aligned_floorplan_path), aligned_img)
     align_info["scan_to_floorplan"] = final_transform_3D.tolist()  # Convert to list for JSON serialization
 
