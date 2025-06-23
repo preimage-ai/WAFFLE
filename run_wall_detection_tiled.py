@@ -76,9 +76,9 @@ def get_args():
     p.add_argument("--ckpt_path", type=str,
                    default="checkpoints/checkpoint-200000/controlnet",
                    help="Path to the extracted ControlNet folder")
-    p.add_argument("--input", "-i", required=True,
+    p.add_argument("--input", "-i", type=str, required=True,
                    help="Path to the cluttered floor-plan PNG")
-    p.add_argument("--output", "-o", required=True,
+    p.add_argument("--output", "-o", type=str, required=True,
                    help="Where to save the walls-only PNG")
     p.add_argument("--num_images", "-n", type=int, default=1,
                    help="How many samples to draw per tile (averaged)")
@@ -148,55 +148,54 @@ def infer_tile(detector, pil_img, num_images):
 
 
 # ---------- main ----------
-def main():
-    args = get_args()
-
+def get_wall_mask(input: Path, output: Path, mpp: float, tile_m, overlap, num_images, ckpt_path):
     # Convert physical tile size (m) to pixels
-    tile_px = int(round(args.tile_m / args.mpp))
+    tile_px = int(round(tile_m / mpp))
     if tile_px <= 0:
         raise ValueError("tile_m divided by mpp produced a non-positive pixel size")
-    stride_px = int(tile_px * (1.0 - args.overlap))
+    stride_px = int(tile_px * (1.0 - overlap))
     stride_px = max(1, stride_px)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    im_full = Image.open(args.input).convert("RGB")
+    im_full = Image.open(input).convert("RGB")
     W, H = im_full.size
     acc = np.zeros((H, W), dtype=np.float32)
     wmap = np.zeros((H, W), dtype=np.float32)
 
     trimmed, box = crop_to_content(np.asarray(im_full), padding=int(0.1 * min(H, W)))
 
-    detector = WallDetection(ckpt_path=args.ckpt_path)
+    detector = WallDetection(ckpt_path=ckpt_path)
     detector.pipe.to(device)
 
     w, h = box[2], box[3]
     bx, by = box[0], box[1]
 
-    print (f"Running tiled inference on {W}x{H} image with {tile_px}px tiles and {args.overlap*100:.0f}% overlap... with stride {stride_px}px")
+    print (f"Running tiled inference on {W}x{H} image with {tile_px}px tiles and {overlap*100:.0f}% overlap... with stride {stride_px}px")
 
     windows = list(sliding_windows(w, h, tile_px, stride_px))
     for (x0, y0, x1, y1) in tqdm(windows, desc="Tiled inference"):
         x0, y0, x1, y1 = bx + x0, by + y0, bx + x1, by + y1
         tile_img = im_full.crop((x0, y0, x1, y1))
-        m, mean_mask_dist = infer_tile(detector, tile_img, args.num_images)
+        m, mean_mask_dist = infer_tile(detector, tile_img, num_images)
         tile_vis = np.zeros_like(acc)
         tile_vis[y0:y1, x0:x1] = m[: y1 - y0, : x1 - x0]
         tile_vis = Image.fromarray(tile_vis.astype(np.uint8), mode="L")
-        tile_vis.save(f"{args.output[:-4]}_tile_{x0}_{y0}.png")
-        print (f"Tile ({x0}, {y0}) mean_mask_dist: {mean_mask_dist:.4f}")
+        # tile_vis.save(f"{output[:-4]}_tile_{x0}_{y0}.png")
+        # print (f"Tile ({x0}, {y0}) mean_mask_dist: {mean_mask_dist:.4f}")
         acc[y0:y1, x0:x1] += m[: y1 - y0, : x1 - x0]
         wmap[y0:y1, x0:x1] += 1.0
 
     # merged = np.where(wmap > 0, acc / wmap, 0).astype(np.uint8)
     merged = (acc > 127).astype(np.uint8) * 255  # binary mask
-    Image.fromarray(merged, mode="L").save(args.output)
+    Image.fromarray(merged, mode="L").save(output)
 
-    print(f"✔ Saved stitched wall mask to {args.output}")
-    print(f"   • mpp:      {args.mpp:.6f} m/px")
-    print(f"   • tile:     {tile_px}px  ≈ {tile_px*args.mpp:.2f} m")
-    print(f"   • overlap:  {args.overlap*100:.0f} %")
+    print(f"✔ Saved stitched wall mask to {output}")
+    print(f"   • mpp:      {mpp:.6f} m/px")
+    print(f"   • tile:     {tile_px}px  ≈ {tile_px*mpp:.2f} m")
+    print(f"   • overlap:  {overlap*100:.0f} %")
 
 
 if __name__ == "__main__":
-    main()
+    args = get_args()
+    get_wall_mask(Path(args.input), Path(args.output), args.mpp, args.tile_m, args.overlap, args.num_images, args.ckpt_path)
