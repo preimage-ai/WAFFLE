@@ -25,9 +25,7 @@ def align_project(proj_dir: Path):
         print("Pipeline hasn't run yet, so no point cloud to align with floorplan.")
         raise FileNotFoundError(f"Point cloud file {cloud_path} does not exist.")
     
-    affine2D, aligned_img = align_cloud(floorplan_path, align_info["mpp"], cloud_path,
-                        rot_range=args.rot_range, rot_step=args.rot_step,
-                        scale_range=args.scale_range, scale_step=args.scale_step)
+    affine2D, aligned_img = align_cloud(floorplan_path, align_info["mpp"], cloud_path)
     cv2.imwrite(str(aligned_floorplan_path), aligned_img)
     scale_x = np.linalg.norm(affine2D[0, :2])
     scale_y = np.linalg.norm(affine2D[1, :2])
@@ -55,6 +53,6 @@ def align_project(proj_dir: Path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Align point cloud with floor plan")
-    parser.add_argument("project_output_folder", required=True, type=Path, help="Path to the pipeline output folder")
+    parser.add_argument("project_output_folder", type=Path, help="Path to the pipeline output folder")
     args = parser.parse_args()
     align_project(args.project_output_folder)
