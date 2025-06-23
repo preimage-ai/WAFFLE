@@ -86,7 +86,7 @@ def render_pointcloud(cloud_path: str,
     normals = pcd.point.normals.numpy()
     
     mask = np.ones_like(seg).astype(np.bool_)
-    mask = np.logical_and(mask, np.logical_or(seg == 0, seg == 1, seg == 32))
+    mask = np.logical_and(mask, np.logical_or(seg == 0, seg == 1, seg == 32))  # wall, building, fence
     mask = np.logical_and(mask, np.abs(normals[:, 2]) < 0.3)
     
     pcd = o3d.io.read_point_cloud(cloud_path)
@@ -136,8 +136,8 @@ def render_pointcloud(cloud_path: str,
 
     # 3.2 Camera: look straight down –Z  (world Z=up convention)
     bbox   = pcd.get_axis_aligned_bounding_box()
-    centre = bbox.get_center()
-    eye    = centre + np.array([0, 0, bbox.get_extent()[2] * 2])
+    center = bbox.get_center()
+    eye    = center + np.array([0, 0, bbox.get_extent()[2] * 2])
     up     = np.array([0, 1, 0])
 
     cam = scene.camera
@@ -146,7 +146,7 @@ def render_pointcloud(cloud_path: str,
                        -extent_xy[0]/2, extent_xy[0]/2,
                        -extent_xy[1]/2, extent_xy[1]/2,
                        0.1, bbox.get_extent()[2]*4)   
-    cam.look_at(centre, eye, up)                  
+    cam.look_at(center, eye, up)                  
 
     # ------------------------------------------------------------
     # 4. Render
@@ -165,13 +165,27 @@ def render_pointcloud(cloud_path: str,
                     left=-extent_xy[0]/2, right=extent_xy[0]/2,
                     bottom=-extent_xy[1]/2, top=extent_xy[1]/2,
                     near=0.1, far=bbox.get_extent()[2]*4,
-                    eye=eye.tolist(), centre=centre.tolist(), up=up.tolist())
+                    eye=eye.tolist(), center=center.tolist(), 
+                    extent = extent_xy.tolist(),
+                    up=up.tolist())
     
     _, bw = cv2.threshold(img_np.mean(axis=-1).astype(np.uint8), 0, 1, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     import matplotlib.pyplot as plt
     plt.imshow(bw)
     plt.show()
-    return bw, cam_dict
+
+    transform_mat = np.eye(4, dtype=np.float32)
+    shift_x = center[0] - extent_xy[0]/2
+    shift_y = center[1] + extent_xy[1]/2
+    transform_mat[0, 3] = -shift_x
+    transform_mat[1, 3] = -shift_y
+
+    y_inv = np.eye(4, dtype=np.float32)
+    y_inv[1, 1] = -1
+    y_inv[:3, :3] = y_inv[:3, :3] / mpp   # Invert y axis when converting from cloud to image
+    transform_mat = y_inv @ transform_mat
+
+    return bw, cam_dict, transform_mat
 
 
 def downscale_img(img, mpp, side=512):
@@ -185,7 +199,7 @@ def downscale_img(img, mpp, side=512):
 # ──────────────── main ────────────────
 def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 180), rot_step = 1.0, scale_range = (0.8, 1.4), scale_step = 0.02):
     mpp = 0.05
-    moving_bw, cam_info = render_pointcloud(cloud, mpp, out_path="test.png")
+    moving_bw, cam_info, cloud_shift = render_pointcloud(cloud, mpp, out_path="test.png")
     # import matplotlib.pyplot as plt
     # plt.imshow(moving_bw)
     # plt.show()
@@ -198,7 +212,12 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     # fac = 1
     print ("mpp_fixed: ", mpp_fixed)
     # breakpoint()
+    
     moving_bw = cv2.resize(moving_bw, (int(moving_bw.shape[1] * fac), int(moving_bw.shape[0] * fac)), interpolation=cv2.INTER_LINEAR)
+    scaling_mat = np.eye(4, dtype=np.float32)
+    scaling_mat[:3, :3] = scaling_mat[:3, :3] * fac
+    cloud_shift = scaling_mat @ cloud_shift  # scale cloud-to-img transform matrix
+
     print ("mpp", mpp)
     cv2.namedWindow("tst", cv2.WINDOW_NORMAL)
     cv2.imshow("tst", (moving_bw * 255).astype(np.uint8))
@@ -358,11 +377,6 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     # connect callback ↔︎ figure
     cid = fig.canvas.mpl_connect('pick_event', on_click)     # :contentReference[oaicite:2]{index=2}
     plt.show()                                            # keep UI reactive
-    # plt.pause(0.001) 
-    # ------------------------------------------------------------------------------
-
-    # while cv2.waitKey(1) != 27:      # 4. keep the program running
-    #     pass
 
 
     print("\n>>> Best pose found")
@@ -373,18 +387,25 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
 
     # final warp
     fac = mpp_fixed / args_mpp
-    M_final = cv2.getRotationMatrix2D((cx, cy), best['angle'], best['scale'])
-    M_final[0, 2] += best['dx']
-    M_final[1, 2] += best['dy']
+    M_img = cv2.getRotationMatrix2D((cx, cy), best['angle'], best['scale'])
+    M_img[0, 2] += best['dx']
+    M_img[1, 2] += best['dy']
 
-    # M_final[0, 2] *= fac
-    # M_final[1, 2] *= fac
-
-    aligned = cv2.warpAffine(moving_bw * 255, M_final, (w, h),
+    aligned = cv2.warpAffine(moving_bw * 255, M_img, (w, h),
                              flags=cv2.INTER_NEAREST,
                              borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    
+    affinemat = np.eye(4, dtype=np.float32)
+    affinemat[:2, :2] = M_img[:2, :2]
+    affinemat[:2, 3] = M_img[:2, 2]
+    M_cloud = affinemat @ cloud_shift
+    y_inv = np.eye(4, dtype=np.float32) # Invert y axis when converting from image to cloud
+    y_inv[1, 1] = -1
+    y_inv[:3, :3] = y_inv[:3, :3] * mpp_fixed
+    M_cloud = y_inv @ M_cloud
+
     cv2.destroyAllWindows()
-    return M_final, aligned
+    return M_cloud, aligned
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -407,3 +428,5 @@ if __name__ == "__main__":
     cv2.imwrite(str(args.out), aligned)
     print(f"Aligned mask written → {args.out}")
 
+    print ("Final transformation matrix:")
+    print (M_final)
