@@ -25,36 +25,19 @@ def align_project(proj_dir: Path):
         print("Pipeline hasn't run yet, so no point cloud to align with floorplan.")
         raise FileNotFoundError(f"Point cloud file {cloud_path} does not exist.")
     
-    affine2D, aligned_img = align_cloud(floorplan_path, align_info["mpp"], cloud_path,
-                        rot_range=args.rot_range, rot_step=args.rot_step,
-                        scale_range=args.scale_range, scale_step=args.scale_step)
+    final_transform_3D, aligned_img = align_cloud(floorplan_path, align_info["mpp"], cloud_path)
     cv2.imwrite(str(aligned_floorplan_path), aligned_img)
-    scale_x = np.linalg.norm(affine2D[0, :2])
-    scale_y = np.linalg.norm(affine2D[1, :2])
-    scale = (scale_x + scale_y) / 2.0  # Average scale to scale z by the same factor
-    translation_2d = affine2D[:, 2]
-
-    # Convert 2D rotation to 3D (assuming rotation around the z-axis)
-    rotation_3d = np.eye(3)
-    rotation_3d[0, 0] = affine2D[0, 0]
-    rotation_3d[0, 1] = affine2D[0, 1]
-    rotation_3d[1, 0] = affine2D[1, 0]
-    rotation_3d[1, 1] = affine2D[1, 1]
-    rotation_3d[2, 2] = scale # z-axis scaled by the avg scale that x and y went through 
-
-    # Build a full 4x4 transformation matrix (homogeneous)
-    transform_3d = np.eye(4)
-    transform_3d[:3, :3] = rotation_3d
-    transform_3d[:3, 3] = [translation_2d[0], translation_2d[1], 0]  # z-axis translation set to zero if points are in xy
-    align_info["scan_to_floorplan"] = transform_3d.tolist()  # Convert to list for JSON serialization
+    align_info["scan_to_floorplan"] = final_transform_3D.tolist()  # Convert to list for JSON serialization
 
     # Save the updated alignment info
     with open(align_json, "w") as f:
         json.dump(align_info, f, indent=4)
-    
+
+    # Save final_transform_3D as dense_floorplan_transform.npy
+    np.save(proj_dir / "floorplan" / "dense_floorplan_transform.npy", final_transform_3D)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Align point cloud with floor plan")
-    parser.add_argument("project_output_folder", required=True, type=Path, help="Path to the pipeline output folder")
+    parser.add_argument("project_output_folder", type=Path, help="Path to the pipeline output folder")
     args = parser.parse_args()
     align_project(args.project_output_folder)
