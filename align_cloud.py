@@ -199,7 +199,7 @@ def downscale_img(img, mpp, side=512):
 # ──────────────── main ────────────────
 def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 180), rot_step = 1.0, scale_range = (0.8, 1.4), scale_step = 0.02, debug=False):
     mpp = 0.05
-    moving_bw, cam_info, cloud_shift = render_pointcloud(cloud, mpp, out_path="test.png")
+    moving_bw, cam_info, cloud_shift = render_pointcloud(str(cloud), mpp, out_path="test.png")
     # import matplotlib.pyplot as plt
     # plt.imshow(moving_bw)
     # plt.show()
