@@ -403,6 +403,8 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     affinemat = np.eye(4, dtype=np.float32)
     affinemat[:2, :2] = M_img[:2, :2]
     affinemat[:2, 3] = M_img[:2, 2]
+    affinescale = np.linalg.det(M_img[:2, :2]) ** (1/2)  # scale factor
+    affinemat[2, 2] = affinescale
     M_cloud = affinemat @ cloud_shift
     y_inv = np.eye(4, dtype=np.float32) # Invert y axis when converting from image to cloud
     y_inv[1, 1] = -1
