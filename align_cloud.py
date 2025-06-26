@@ -205,7 +205,10 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     # plt.show()
 
     fixed_bw = load_binary(fixed)
+    floorplan_height = fixed_bw.shape[0] * args_mpp
     fixed_bw, mpp_fixed = downscale_img(fixed_bw, mpp=args_mpp)
+    # invert y axis of the fixed image
+    # fixed_bw = np.flipud(fixed_bw)
     # moving_bw = load_binary(args.moving)
 
     fac = mpp / mpp_fixed
@@ -410,6 +413,11 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     y_inv[1, 1] = -1
     y_inv[:3, :3] = y_inv[:3, :3] * mpp_fixed
     M_cloud = y_inv @ M_cloud
+    # move cloud in y by floorplan height, due to y flip and cloud origin shift final cloud seems to w origin at top left corner
+    # so we need to move it down by the floorplan height
+    T_y = np.eye(4, dtype=np.float32)
+    T_y[1, 3] = floorplan_height
+    M_cloud = T_y @ M_cloud
 
     if debug:
         cv2.destroyAllWindows()
