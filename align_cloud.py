@@ -196,6 +196,19 @@ def downscale_img(img, mpp, side=512):
     mpp_new = mpp / fac
     return img_resized, mpp_new
 
+def pad_for_rotation(img: np.ndarray) -> np.ndarray:
+    """Pad image to be square so that the rotation of the image does not crop it."""
+    h, w = img.shape
+    diag = int(np.ceil(np.sqrt(h**2 + w**2)))
+    pad_h = (diag - h) // 2
+    pad_w = (diag - w) // 2
+    padded = cv2.copyMakeBorder(img, pad_h, pad_h, pad_w, pad_w,
+                                cv2.BORDER_CONSTANT, value=0)
+    pad_transform = np.eye(4, dtype=np.float32)
+    pad_transform[0, 3] = pad_w
+    pad_transform[1, 3] = pad_h
+    return padded, pad_transform
+
 # ──────────────── main ────────────────
 def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 180), rot_step = 1.0, scale_range = (0.8, 1.4), scale_step = 0.02, debug=False):
     mpp = 0.05
@@ -219,10 +232,6 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     cloud_shift = scaling_mat @ cloud_shift  # scale cloud-to-img transform matrix
 
     print ("mpp", mpp)
-    if debug:
-        cv2.namedWindow("tst", cv2.WINDOW_NORMAL)
-        cv2.imshow("tst", (moving_bw * 255).astype(np.uint8))
-        cv2.waitKey(0)
 
     # fixed_edges = edge_map(fixed_bw)
     # moving_edges = edge_map(moving_bw)
@@ -242,7 +251,16 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
     accuracy_dist[-1, :] = dist_max
 
     h, w = fixed_bw.shape
-    cx, cy = w / 2.0, h / 2.0
+
+    moving_bw, pad_trans = pad_for_rotation(moving_bw)
+    mh, mw = moving_bw.shape
+    cx, cy = mw / 2.0, mh / 2.0
+    cloud_shift = pad_trans @ cloud_shift  # add padding shift in cloud-to-img transform matrix
+    
+    if debug:
+        cv2.namedWindow("tst", cv2.WINDOW_NORMAL)
+        cv2.imshow("tst", (moving_bw * 255).astype(np.uint8))
+        cv2.waitKey(0)
 
     if debug:
         cv2.namedWindow("Chamfer Cost", cv2.WINDOW_NORMAL)
@@ -259,9 +277,13 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         for ang in rot_angles:
             # single warp that includes *both* rotation and scale
             M_rs = cv2.getRotationMatrix2D((cx, cy), ang, s)
-            rotated = cv2.warpAffine(moving_bw, M_rs, (w, h),
+            M_rs[0, 2] += mw * (s - 1) / 2
+            M_rs[1, 2] += mh * (s - 1) / 2
+            rotated = cv2.warpAffine(moving_bw, M_rs, (int(mw * s), int(mh * s)),
                                      flags=cv2.INTER_NEAREST,
                                      borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+            cv2.imshow("tst", (rotated * 255).astype(np.uint8))
 
             # translation search via Chamfer convolution
             recall_score_map = chamfer_score(recall_dist, rotated)
@@ -289,8 +311,8 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
                 #     cv2.waitKey(0)  # pause for inspection
 
                 M_tmp = M_rs.copy()
-                M_tmp[0, 2] += max_loc[0] - cx
-                M_tmp[1, 2] += max_loc[1] - cy
+                M_tmp[0, 2] += max_loc[0] - cx - (mw * (s - 1) / 2)
+                M_tmp[1, 2] += max_loc[1] - cy - (mh * (s - 1) / 2)
                 warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
                                             flags=cv2.INTER_NEAREST,
                                             borderMode=cv2.BORDER_CONSTANT, borderValue=0)
@@ -340,7 +362,9 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         ang = list(chamfers[s].keys())[event.ind[0]]
         # single warp that includes *both* rotation and scale
         M_rs = cv2.getRotationMatrix2D((cx, cy), ang, s)
-        rotated = cv2.warpAffine(moving_bw, M_rs, (w, h),
+        M_rs[0, 2] += mw * (s - 1) / 2
+        M_rs[1, 2] += mh * (s - 1) / 2
+        rotated = cv2.warpAffine(moving_bw, M_rs, (int(mw * s), int(mh * s)),
                                     flags=cv2.INTER_NEAREST,
                                     borderMode=cv2.BORDER_CONSTANT, borderValue=0)
 
@@ -362,8 +386,8 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         cv2.imshow("Chamfer Cost", cost_vis)
 
         M_tmp = M_rs.copy()
-        M_tmp[0, 2] += max_loc[0] - cx
-        M_tmp[1, 2] += max_loc[1] - cy
+        M_tmp[0, 2] += max_loc[0] - cx - (mw * (s - 1) / 2)
+        M_tmp[1, 2] += max_loc[1] - cy - (mh * (s - 1) / 2)
         warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
                                         flags=cv2.INTER_NEAREST,
                                         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
@@ -375,7 +399,29 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         # cv2.drawContours(overlay, cnt, -1, (0, 255, 0), 1)
         overlay[warped_edge > 0] = (0, 0, 255)
         cv2.imshow("Overlay Preview", overlay)
-        cv2.waitKey(1)
+
+        def on_cv2_click(event, x, y, flags, params):
+            """Callback: user clicks on the OpenCV window → print current pose."""
+            if event == cv2.EVENT_LBUTTONDOWN:
+                M_tmp = M_rs.copy()
+                M_tmp[0, 2] += x - cx
+                M_tmp[1, 2] += y - cy
+                warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
+                                                flags=cv2.INTER_NEAREST,
+                                                borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+                dist_uint = (recall_dist * 255 / recall_dist.max()).astype(np.uint8)
+                overlay = cv2.applyColorMap(dist_uint, cv2.COLORMAP_TURBO)
+                overlay[fixed_bw > 0] = (0, 0, 0)
+                # cnt, _ = cv2.findContours(warped_edge, cv2.RETR_EXTERNAL,
+                #                           cv2.CHAIN_APPROX_SIMPLE)
+                # cv2.drawContours(overlay, cnt, -1, (0, 255, 0), 1)
+                overlay[warped_edge > 0] = (0, 0, 255)
+                cv2.imshow("Overlay Preview", overlay)
+        
+        cv2.setMouseCallback("Chamfer Cost", on_cv2_click)
+        while cv2.waitKey(1) & 0xFF != ord('q'):
+            pass
+
         print(f"[click angle={ang:.1f}  scale={s:.3f}  cost={max_val:.0f}")
 
     # connect callback ↔︎ figure
