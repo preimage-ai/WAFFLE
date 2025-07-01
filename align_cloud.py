@@ -277,8 +277,10 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         for ang in rot_angles:
             # single warp that includes *both* rotation and scale
             M_rs = cv2.getRotationMatrix2D((cx, cy), ang, s)
-            M_rs[0, 2] += mw * (s - 1) / 2
-            M_rs[1, 2] += mh * (s - 1) / 2
+            c_shift_x = mw * (s - 1) / 2    # shift in x to center the kernel img
+            c_shift_y = mh * (s - 1) / 2    # shift in y to center the kernel img
+            M_rs[0, 2] += c_shift_x
+            M_rs[1, 2] += c_shift_y
             rotated = cv2.warpAffine(moving_bw, M_rs, (int(mw * s), int(mh * s)),
                                      flags=cv2.INTER_NEAREST,
                                      borderMode=cv2.BORDER_CONSTANT, borderValue=0)
@@ -311,8 +313,8 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
                 #     cv2.waitKey(0)  # pause for inspection
 
                 M_tmp = M_rs.copy()
-                M_tmp[0, 2] += max_loc[0] - cx - (mw * (s - 1) / 2)
-                M_tmp[1, 2] += max_loc[1] - cy - (mh * (s - 1) / 2)
+                M_tmp[0, 2] += max_loc[0] - cx - c_shift_x
+                M_tmp[1, 2] += max_loc[1] - cy - c_shift_y
                 warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
                                             flags=cv2.INTER_NEAREST,
                                             borderMode=cv2.BORDER_CONSTANT, borderValue=0)
@@ -362,8 +364,10 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         ang = list(chamfers[s].keys())[event.ind[0]]
         # single warp that includes *both* rotation and scale
         M_rs = cv2.getRotationMatrix2D((cx, cy), ang, s)
-        M_rs[0, 2] += mw * (s - 1) / 2
-        M_rs[1, 2] += mh * (s - 1) / 2
+        c_shift_x = mw * (s - 1) / 2    # shift in x to center the kernel img
+        c_shift_y = mh * (s - 1) / 2    # shift in y to center the kernel img
+        M_rs[0, 2] += c_shift_x
+        M_rs[1, 2] += c_shift_y
         rotated = cv2.warpAffine(moving_bw, M_rs, (int(mw * s), int(mh * s)),
                                     flags=cv2.INTER_NEAREST,
                                     borderMode=cv2.BORDER_CONSTANT, borderValue=0)
@@ -386,8 +390,8 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
         cv2.imshow("Chamfer Cost", cost_vis)
 
         M_tmp = M_rs.copy()
-        M_tmp[0, 2] += max_loc[0] - cx - (mw * (s - 1) / 2)
-        M_tmp[1, 2] += max_loc[1] - cy - (mh * (s - 1) / 2)
+        M_tmp[0, 2] += max_loc[0] - cx - c_shift_x
+        M_tmp[1, 2] += max_loc[1] - cy - c_shift_y
         warped_edge = cv2.warpAffine(moving_bw * 255, M_tmp, (w, h),
                                         flags=cv2.INTER_NEAREST,
                                         borderMode=cv2.BORDER_CONSTANT, borderValue=0)
