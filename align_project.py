@@ -6,6 +6,15 @@ import json
 import cv2
 import numpy as np
 
+def extract_scale_from_transform(T):
+    """Extract uniform scale from a 4x4 transform matrix"""
+    R = T[:3, :3]
+    scale_x = np.linalg.norm(R[0])
+    scale_y = np.linalg.norm(R[1])
+    scale_z = np.linalg.norm(R[2])
+    uniform_scale = (scale_x + scale_y + scale_z) / 3.0
+    return uniform_scale
+
 def align_project(proj_dir: Path):
     #Check if the project directory exists
     if not proj_dir.exists():
@@ -32,13 +41,14 @@ def align_project(proj_dir: Path):
     final_transform_3D, aligned_img = align_cloud(waffle_mask_path, align_info["mpp"], cloud_path, debug=False)
     cv2.imwrite(str(aligned_floorplan_path), aligned_img)
     align_info["scan_to_floorplan"] = final_transform_3D.tolist()  # Convert to list for JSON serialization
-
+    align_info["scale"] = extract_scale_from_transform(final_transform_3D)
     # Save the updated alignment info
     with open(align_json, "w") as f:
         json.dump(align_info, f, indent=4)
 
     # Save final_transform_3D as dense_floorplan_transform.npy
     np.save(proj_dir / "floorplan" / "dense_floorplan_transform.npy", final_transform_3D)
+    np.savetxt(proj_dir / "floorplan" / "dense_floorplan_scale.txt", [align_info["scale"]], fmt='%.6f')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Align point cloud with floor plan")
