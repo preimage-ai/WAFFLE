@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Tiled WAFFLE wall-segmentation with real-world-aware tile sizing.
+Tiled WAFFLE wall-segmentation with intelligent tile grid sizing.
 
  • --mpp <float> gives metres-per-pixel for the input floor plan.
- • --tile_m <float> sets the real-world edge length of each tile (default 3 m).
-   The script converts this to pixels:  tile_px = round(tile_m / mpp).
+ • --tile_m <float> sets the starting tile size in metres (default 3 m).
+   The script uses this as a reference to calculate the optimal number of tiles
+   (4-6 recommended, max 9) based on floorplan dimensions and aspect ratio.
  • All other behaviour (overlap %, inversion convention, etc.) is unchanged.
 """
 import argparse, math, os, tempfile
@@ -84,8 +85,8 @@ def get_args():
                    help="How many samples to draw per tile (averaged)")
     p.add_argument("--mpp", type=float, required=True,
                    help="Metres per pixel of the input plan (e.g. 0.01 for 1 cm / px)")
-    p.add_argument("--tile_m", type=float, default=10.0,
-                   help="Edge length of a square tile in metres (default 3 m)")
+    p.add_argument("--tile_m", type=float, default=3.0,
+                   help="Starting tile size in metres for calculating optimal tile count (default 3 m)")
     p.add_argument("--overlap", type=float, default=0.2,
                    help="Tile overlap fraction between 0 and 0.5 (e.g. 0.25 = 25 %)")
     return p.parse_args()
@@ -127,11 +128,9 @@ def infer_tile(detector, pil_img, num_images):
     # mask = mask_eroded.resize(pil_img.size, Image.Resampling.BILINEAR)
     mask = np.array(mask_eroded)
     mask = 255 - mask  # invert: white walls (255) on black bg (0)
-    # 3. “Line-likeness” of the mask
     skel = skeletonize((255-np.array(mask_eroded_max)) > 0)
-    # dist_img = cv2.distanceTransform(1 - skel.astype(np.uint8), cv2.DIST_L2, 5, dstType=cv2.CV_32F)
     dist_img = cv2.distanceTransform(1-(skel > 0).astype(np.uint8), cv2.DIST_L2, 5, dstType=cv2.CV_32F)
-    # 4. Chamfer score of mask in distance transform space
+
     # mask_dist = dist_img[mask > 0]
     mean_mask_dist = dist_img[mask > 0].sum() / skel.sum()  if skel.sum() > 0 else 0.0
     mask = cv2.resize(mask, pil_img.size, interpolation=cv2.INTER_LINEAR)
@@ -149,29 +148,61 @@ def infer_tile(detector, pil_img, num_images):
 
 # ---------- main ----------
 def get_wall_mask(input: Path, output: Path, mpp: float, tile_m, overlap, num_images, ckpt_path):
-    # Convert physical tile size (m) to pixels
-    tile_px = int(round(tile_m / mpp))
-    if tile_px <= 0:
-        raise ValueError("tile_m divided by mpp produced a non-positive pixel size")
-    stride_px = int(tile_px * (1.0 - overlap))
-    stride_px = max(1, stride_px)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     im_full = Image.open(input).convert("RGB")
     W, H = im_full.size
-    acc = np.zeros((H, W), dtype=np.float32)
-    wmap = np.zeros((H, W), dtype=np.float32)
-
+    
     trimmed, box = crop_to_content(np.asarray(im_full), padding=int(0.1 * min(H, W)))
-
+    
     detector = WallDetection(ckpt_path=ckpt_path)
     detector.pipe.to(device)
 
     w, h = box[2], box[3]
     bx, by = box[0], box[1]
+    
+    # Calculate actual floorplan dimensions in meters
+    floorplan_width_m = w * mpp
+    floorplan_height_m = h * mpp
+    
+    print(f"Floorplan dimensions: {floorplan_width_m:.1f}m x {floorplan_height_m:.1f}m")
+    print(f"Requested tile size: {tile_m}m")
+    
+    def tiles_from_tile_m(tile_m: float):
+        # Convert desired tile size (m) to pixels
+        tile_px = max(1, int(round(tile_m / mpp)))
+        # How many tiles (ceiling) to cover width/height
+        tiles_x = max(1, math.ceil(w / tile_px))
+        tiles_y = max(1, math.ceil(h / tile_px))
+        return tile_px, tiles_x, tiles_y
 
-    print (f"Running tiled inference on {W}x{H} image with {tile_px}px tiles and {overlap*100:.0f}% overlap... with stride {stride_px}px")
+    # First pass with requested tile size
+    tile_px, tiles_x, tiles_y = tiles_from_tile_m(tile_m)
+    
+    # Enforce at least 2x2 tiles; if not, auto-tiling kicks in
+    auto_tiling = False
+    if tiles_x < 2 or tiles_y < 2:
+        auto_tiling = True
+        new_tile_m = max(1e-6, min(floorplan_width_m / 2.0, floorplan_height_m / 2.0))
+        print(
+            f"Auto-tiling triggered (computed {tiles_x}x{tiles_y}). "
+            f"Adjusting tile size from {tile_m:.2f}m -> {new_tile_m:.2f}m to ensure at least 2x2 tiles."
+        )
+        tile_m = new_tile_m
+        tile_px, tiles_x, tiles_y = tiles_from_tile_m(tile_m)
+
+    tile_width_px = max(1, w // tiles_x)
+    tile_height_px = max(1, h // tiles_y)
+    tile_px = max(64, min(tile_width_px, tile_height_px))  # ensure minimum 64 px
+    stride_px = max(1, int(tile_px * (1.0 - overlap)))
+    
+    print(f"Calculated grid: {tiles_x}x{tiles_y}")
+    print(f"Tile size: {tile_px}px ≈ {tile_px*mpp:.2f}m")
+    print(f"Using tiled inference with {overlap*100:.0f}% overlap (stride: {stride_px}px)")
+    
+    # Use tiled processing
+    acc = np.zeros((H, W), dtype=np.float32)
+    wmap = np.zeros((H, W), dtype=np.float32)
 
     windows = list(sliding_windows(w, h, tile_px, stride_px))
     for (x0, y0, x1, y1) in tqdm(windows, desc="Tiled inference"):
@@ -180,14 +211,15 @@ def get_wall_mask(input: Path, output: Path, mpp: float, tile_m, overlap, num_im
         m, mean_mask_dist = infer_tile(detector, tile_img, num_images)
         tile_vis = np.zeros_like(acc)
         tile_vis[y0:y1, x0:x1] = m[: y1 - y0, : x1 - x0]
-        tile_vis = Image.fromarray(tile_vis.astype(np.uint8), mode="L")
+        # tile_vis = Image.fromarray(tile_vis.astype(np.uint8), mode="L")
         # tile_vis.save(f"{output[:-4]}_tile_{x0}_{y0}.png")
         # print (f"Tile ({x0}, {y0}) mean_mask_dist: {mean_mask_dist:.4f}")
         acc[y0:y1, x0:x1] += m[: y1 - y0, : x1 - x0]
         wmap[y0:y1, x0:x1] += 1.0
 
-    # merged = np.where(wmap > 0, acc / wmap, 0).astype(np.uint8)
-    merged = (acc > 127).astype(np.uint8) * 255  # binary mask
+    # Properly average overlapping regions - each pixel gets the mean of all tiles that covered it
+    averaged = np.where(wmap > 0, acc / wmap, 0)
+    merged = (averaged > 127).astype(np.uint8) * 255
     Image.fromarray(merged, mode="L").save(output)
 
     print(f"✔ Saved stitched wall mask to {output}")
