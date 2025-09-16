@@ -1,5 +1,4 @@
 from align_cloud import align_cloud
-from run_wall_detection_tiled import get_wall_mask
 import argparse
 from pathlib import Path
 import json
@@ -15,7 +14,7 @@ def extract_scale_from_transform(T):
     uniform_scale = (scale_x + scale_y + scale_z) / 3.0
     return uniform_scale
 
-def align_project(proj_dir: Path):
+def align_project(proj_dir: Path, wall_mask_path: Path = None):
     #Check if the project directory exists
     if not proj_dir.exists():
         raise FileNotFoundError(f"Project directory {proj_dir} does not exist.")
@@ -35,9 +34,15 @@ def align_project(proj_dir: Path):
         print("Pipeline hasn't run yet, so no point cloud to align with floorplan.")
         raise FileNotFoundError(f"Point cloud file {cloud_path} does not exist.")
     
-    # Create wall map 
-    waffle_mask_path = proj_dir / "floorplan" / "wall_mask_waffle.png"
-    get_wall_mask(floorplan_path, waffle_mask_path, align_info["mpp"], tile_m=75.0, overlap=0.3, num_images=1, ckpt_path="checkpoints/checkpoint-200000/controlnet")
+    # Use provided wall mask or default path
+    if wall_mask_path is None:
+        waffle_mask_path = proj_dir / "floorplan" / "wall_mask_waffle.png"
+    else:
+        waffle_mask_path = wall_mask_path
+    
+    # Check if wall mask exists
+    if not waffle_mask_path.exists():
+        raise FileNotFoundError(f"Wall mask file not found: {waffle_mask_path}. Please ensure wall mask is created before running alignment.")
     final_transform_3D, aligned_img = align_cloud(waffle_mask_path, align_info["mpp"], cloud_path, debug=False)
     cv2.imwrite(str(aligned_floorplan_path), aligned_img)
     align_info["scan_to_floorplan"] = final_transform_3D.tolist()  # Convert to list for JSON serialization
@@ -53,5 +58,6 @@ def align_project(proj_dir: Path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Align point cloud with floor plan")
     parser.add_argument("project_output_folder", type=Path, help="Path to the pipeline output folder")
+    parser.add_argument("--wall_mask", type=Path, help="Path to wall mask file (if not provided, will use wall_mask_waffle.png from floorplan directory)")
     args = parser.parse_args()
-    align_project(args.project_output_folder)
+    align_project(args.project_output_folder, args.wall_mask)
