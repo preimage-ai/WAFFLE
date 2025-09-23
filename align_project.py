@@ -54,6 +54,13 @@ def align_project(proj_dir: Path, wall_mask_path: Path = None):
     # Save final_transform_3D as dense_floorplan_transform.npy
     np.save(proj_dir / "floorplan" / "dense_floorplan_transform.npy", final_transform_3D)
     np.savetxt(proj_dir / "floorplan" / "dense_floorplan_scale.txt", [align_info["scale"]], fmt='%.6f')
+    
+    # Create identity matrix for successful auto-alignment API calls
+    identity_matrix = np.eye(4, dtype=np.float32)
+    
+    # Save identity matrix as JSON for API calls (successful auto-alignment)
+    with open(proj_dir / "floorplan" / "auto_align_success_identity_matrix.json", "w") as f:
+        json.dump(identity_matrix.tolist(), f, indent=2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Align point cloud with floor plan")
