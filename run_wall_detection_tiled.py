@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Tiled WAFFLE wall-segmentation with intelligent tile grid sizing.
+Tiled WAFFLE wall-segmentation with constrained tile grid sizing.
 
  • --mpp <float> gives metres-per-pixel for the input floor plan.
- • --tile_m <float> sets the starting tile size in metres (default 3 m).
-   The script uses this as a reference to calculate the optimal number of tiles
-   (4-6 recommended, max 9) based on floorplan dimensions and aspect ratio.
- • All other behaviour (overlap %, inversion convention, etc.) is unchanged.
+ • --max_tiles_x/y <int> limit the tile grid (default 3x3, recommended 2x2 to 4x4).
+   The script calculates the optimal tile size to cover the floorplan with at most
+   this many tiles, making tiles as large as possible while staying within bounds.
+ • --min_tile_m <float> optionally sets a minimum tile size in metres.
+   If not specified, it's auto-calculated from max_tiles to fit the floorplan.
+ 
+Note: Performance degrades with very large tiles. Keep grid to 2x2-4x4 for best results.
 """
 import argparse, math, os, tempfile
 from tqdm import tqdm
@@ -85,8 +88,12 @@ def get_args():
                    help="How many samples to draw per tile (averaged)")
     p.add_argument("--mpp", type=float, required=True,
                    help="Metres per pixel of the input plan (e.g. 0.01 for 1 cm / px)")
-    p.add_argument("--tile_m", type=float, default=3.0,
-                   help="Starting tile size in metres for calculating optimal tile count (default 3 m)")
+    p.add_argument("--min_tile_m", type=float, default=None,
+                   help="Minimum tile size in metres (default: auto-calculated based on max_tiles)")
+    p.add_argument("--max_tiles_x", type=int, default=3,
+                   help="Maximum number of tiles in X direction (default: 3)")
+    p.add_argument("--max_tiles_y", type=int, default=3,
+                   help="Maximum number of tiles in Y direction (default: 3)")
     p.add_argument("--overlap", type=float, default=0.2,
                    help="Tile overlap fraction between 0 and 0.5 (e.g. 0.25 = 25 %)")
     return p.parse_args()
@@ -147,7 +154,8 @@ def infer_tile(detector, pil_img, num_images):
 
 
 # ---------- main ----------
-def get_wall_mask(input: Path, output: Path, mpp: float, tile_m, overlap, num_images, ckpt_path):
+def get_wall_mask(input: Path, output: Path, mpp: float, min_tile_m, max_tiles_x, max_tiles_y, 
+                  overlap, num_images, ckpt_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     im_full = Image.open(input).convert("RGB")
@@ -166,38 +174,49 @@ def get_wall_mask(input: Path, output: Path, mpp: float, tile_m, overlap, num_im
     floorplan_height_m = h * mpp
     
     print(f"Floorplan dimensions: {floorplan_width_m:.1f}m x {floorplan_height_m:.1f}m")
-    print(f"Requested tile size: {tile_m}m")
+    print(f"Max tile grid: {max_tiles_x}x{max_tiles_y}")
     
-    def tiles_from_tile_m(tile_m: float):
-        # Convert desired tile size (m) to pixels
-        tile_px = max(1, int(round(tile_m / mpp)))
-        # How many tiles (ceiling) to cover width/height
-        tiles_x = max(1, math.ceil(w / tile_px))
-        tiles_y = max(1, math.ceil(h / tile_px))
-        return tile_px, tiles_x, tiles_y
-
-    # First pass with requested tile size
-    tile_px, tiles_x, tiles_y = tiles_from_tile_m(tile_m)
+    # Calculate optimal tile grid
+    # Goal: Use minimum number of tiles (starting from 2x2) while respecting min_tile_m constraint
     
-    # Enforce at least 2x2 tiles; if not, auto-tiling kicks in
-    auto_tiling = False
-    if tiles_x < 2 or tiles_y < 2:
-        auto_tiling = True
-        new_tile_m = max(1e-6, min(floorplan_width_m / 2.0, floorplan_height_m / 2.0))
-        print(
-            f"Auto-tiling triggered (computed {tiles_x}x{tiles_y}). "
-            f"Adjusting tile size from {tile_m:.2f}m -> {new_tile_m:.2f}m to ensure at least 2x2 tiles."
-        )
-        tile_m = new_tile_m
-        tile_px, tiles_x, tiles_y = tiles_from_tile_m(tile_m)
-
-    tile_width_px = max(1, w // tiles_x)
-    tile_height_px = max(1, h // tiles_y)
-    tile_px = max(64, min(tile_width_px, tile_height_px))  # ensure minimum 64 px
+    # If min_tile_m not specified, calculate based on max_tiles
+    if min_tile_m is None:
+        # Start with the constraint that we want at most max_tiles_x × max_tiles_y
+        # Calculate minimum tile size needed
+        min_tile_m_x = floorplan_width_m / max_tiles_x
+        min_tile_m_y = floorplan_height_m / max_tiles_y
+        min_tile_m = max(min_tile_m_x, min_tile_m_y)
+        print(f"Auto-calculated min_tile_m: {min_tile_m:.2f}m (to fit {max_tiles_x}x{max_tiles_y} grid)")
+    else:
+        print(f"Using specified min_tile_m: {min_tile_m:.2f}m")
+    
+    # Convert to pixels
+    min_tile_px = max(64, int(round(min_tile_m / mpp)))  # enforce minimum 64px
+    
+    # Calculate how many tiles we'd need with this minimum tile size
+    tiles_x_needed = max(1, math.ceil(floorplan_width_m / min_tile_m))
+    tiles_y_needed = max(1, math.ceil(floorplan_height_m / min_tile_m))
+    
+    # Clamp to max_tiles constraints
+    tiles_x = min(tiles_x_needed, max_tiles_x)
+    tiles_y = min(tiles_y_needed, max_tiles_y)
+    
+    # Ensure at least 2x2 for better stitching (unless floorplan is tiny)
+    if tiles_x == 1 and floorplan_width_m > min_tile_m * 1.5:
+        tiles_x = 2
+    if tiles_y == 1 and floorplan_height_m > min_tile_m * 1.5:
+        tiles_y = 2
+    
+    # Calculate actual tile size in pixels based on grid
+    tile_width_px = max(min_tile_px, w // tiles_x)
+    tile_height_px = max(min_tile_px, h // tiles_y)
+    tile_px = min(tile_width_px, tile_height_px)  # use smaller dimension for square tiles
+    
+    actual_tile_m = tile_px * mpp
     stride_px = max(1, int(tile_px * (1.0 - overlap)))
     
-    print(f"Calculated grid: {tiles_x}x{tiles_y}")
-    print(f"Tile size: {tile_px}px ≈ {tile_px*mpp:.2f}m")
+    print(f"Final tile grid: {tiles_x}x{tiles_y} ({tiles_x * tiles_y} tiles total)")
+    print(f"Tile size: {tile_px}px ≈ {actual_tile_m:.2f}m")
     print(f"Using tiled inference with {overlap*100:.0f}% overlap (stride: {stride_px}px)")
     
     # Use tiled processing
@@ -230,4 +249,6 @@ def get_wall_mask(input: Path, output: Path, mpp: float, tile_m, overlap, num_im
 
 if __name__ == "__main__":
     args = get_args()
-    get_wall_mask(Path(args.input), Path(args.output), args.mpp, args.tile_m, args.overlap, args.num_images, args.ckpt_path)
+    min_tile_m = args.min_tile_m 
+    get_wall_mask(Path(args.input), Path(args.output), args.mpp, min_tile_m, 
+                  args.max_tiles_x, args.max_tiles_y, args.overlap, args.num_images, args.ckpt_path)
