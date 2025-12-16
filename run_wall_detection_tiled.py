@@ -8,6 +8,8 @@ Tiled WAFFLE wall-segmentation with constrained tile grid sizing.
    this many tiles, making tiles as large as possible while staying within bounds.
  • --min_tile_m <float> optionally sets a minimum tile size in metres.
    If not specified, it's auto-calculated from max_tiles to fit the floorplan.
+ • --max_sliding_tiles <int> maximum total sliding windows to process (default 12).
+   If overlap would create more windows, overlap is automatically reduced to stay within limit.
  
 Note: Performance degrades with very large tiles. Keep grid to 2x2-4x4 for best results.
 """
@@ -96,6 +98,8 @@ def get_args():
                    help="Maximum number of tiles in Y direction (default: 3)")
     p.add_argument("--overlap", type=float, default=0.2,
                    help="Tile overlap fraction between 0 and 0.5 (e.g. 0.25 = 25 %)")
+    p.add_argument("--max_sliding_tiles", type=int, default=12,
+                   help="Maximum total number of sliding windows to process (default: 12)")
     return p.parse_args()
 
 
@@ -155,7 +159,7 @@ def infer_tile(detector, pil_img, num_images):
 
 # ---------- main ----------
 def get_wall_mask(input: Path, output: Path, mpp: float, min_tile_m, max_tiles_x, max_tiles_y, 
-                  overlap, num_images, ckpt_path):
+                  overlap, num_images, ckpt_path, max_sliding_tiles):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     im_full = Image.open(input).convert("RGB")
@@ -213,24 +217,65 @@ def get_wall_mask(input: Path, output: Path, mpp: float, min_tile_m, max_tiles_x
     tile_px = min(tile_width_px, tile_height_px)  # use smaller dimension for square tiles
     
     actual_tile_m = tile_px * mpp
-    stride_px = max(1, int(tile_px * (1.0 - overlap)))
     
     print(f"Final tile grid: {tiles_x}x{tiles_y} ({tiles_x * tiles_y} tiles total)")
     print(f"Tile size: {tile_px}px ≈ {actual_tile_m:.2f}m")
-    print(f"Using tiled inference with {overlap*100:.0f}% overlap (stride: {stride_px}px)")
+    
+    # Calculate stride and adjust overlap if necessary to respect max_sliding_tiles
+    stride_px = max(1, int(tile_px * (1.0 - overlap)))
+    
+    # Calculate how many windows this would generate
+    nx = math.ceil((w - tile_px) / stride_px) + 1
+    ny = math.ceil((h - tile_px) / stride_px) + 1
+    nx, ny = max(1, nx), max(1, ny)
+    total_windows = nx * ny
+    
+    actual_overlap = overlap
+    if total_windows > max_sliding_tiles:
+        print(f"Initial overlap {overlap*100:.0f}% would create {total_windows} windows (exceeds max {max_sliding_tiles})")
+        
+        # Search from requested stride (max overlap) to tile_px (no overlap)
+        min_stride = stride_px  # Start from requested overlap
+        max_stride = tile_px     # No overlap (stride = tile size)
+        
+        best_stride = max_stride  # Default to no overlap if nothing works
+        for test_stride in range(min_stride, max_stride + 1):
+            test_nx = math.ceil((w - tile_px) / test_stride) + 1
+            test_ny = math.ceil((h - tile_px) / test_stride) + 1
+            test_nx, test_ny = max(1, test_nx), max(1, test_ny)
+            test_total = test_nx * test_ny
+            
+            if test_total <= max_sliding_tiles:
+                best_stride = test_stride
+                nx, ny = test_nx, test_ny
+                total_windows = test_total
+                break
+        
+        stride_px = best_stride
+        actual_overlap = 1.0 - (stride_px / tile_px)
+        
+        if actual_overlap <= 0.001:  # essentially no overlap
+            print(f"⚠ Adjusted to NO OVERLAP (0%) → {total_windows} windows ({nx}x{ny})")
+        else:
+            print(f"Adjusted overlap to {actual_overlap*100:.1f}% → {total_windows} windows ({nx}x{ny})")
+    else:
+        print(f"Using {total_windows} windows ({nx}x{ny}) with {overlap*100:.0f}% overlap")
+    
+    print(f"Stride: {stride_px}px")
     
     # Use tiled processing
     acc = np.zeros((H, W), dtype=np.float32)
     wmap = np.zeros((H, W), dtype=np.float32)
 
     windows = list(sliding_windows(w, h, tile_px, stride_px))
+    
     for (x0, y0, x1, y1) in tqdm(windows, desc="Tiled inference"):
         x0, y0, x1, y1 = bx + x0, by + y0, bx + x1, by + y1
         tile_img = im_full.crop((x0, y0, x1, y1))
         m, mean_mask_dist = infer_tile(detector, tile_img, num_images)
         tile_vis = np.zeros_like(acc)
         tile_vis[y0:y1, x0:x1] = m[: y1 - y0, : x1 - x0]
-        # tile_vis = Image.fromarray(tile_vis.astype(np.uint8), mode="L")
+        # tile_vis = Image.fromarray(tile_vis.astype(np.uint8), mode="L")                                                  
         # tile_vis.save(f"{output[:-4]}_tile_{x0}_{y0}.png")
         # print (f"Tile ({x0}, {y0}) mean_mask_dist: {mean_mask_dist:.4f}")
         acc[y0:y1, x0:x1] += m[: y1 - y0, : x1 - x0]
@@ -244,11 +289,12 @@ def get_wall_mask(input: Path, output: Path, mpp: float, min_tile_m, max_tiles_x
     print(f"✔ Saved stitched wall mask to {output}")
     print(f"   • mpp:      {mpp:.6f} m/px")
     print(f"   • tile:     {tile_px}px  ≈ {tile_px*mpp:.2f} m")
-    print(f"   • overlap:  {overlap*100:.0f} %")
+    print(f"   • overlap:  {actual_overlap*100:.1f} %")
 
 
 if __name__ == "__main__":
     args = get_args()
     min_tile_m = args.min_tile_m 
     get_wall_mask(Path(args.input), Path(args.output), args.mpp, min_tile_m, 
-                  args.max_tiles_x, args.max_tiles_y, args.overlap, args.num_images, args.ckpt_path)
+                  args.max_tiles_x, args.max_tiles_y, args.overlap, args.num_images, 
+                  args.ckpt_path, args.max_sliding_tiles)

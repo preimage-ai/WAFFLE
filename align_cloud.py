@@ -287,8 +287,8 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
             rotated = cv2.warpAffine(moving_bw, M_rs, (int(mw * s), int(mh * s)),
                                      flags=cv2.INTER_NEAREST,
                                      borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-
-            cv2.imshow("tst", (rotated * 255).astype(np.uint8))
+            if debug:
+                cv2.imshow("tst", (rotated * 255).astype(np.uint8))
 
             # translation search via Chamfer convolution
             recall_score_map = chamfer_score(recall_dist, rotated)
