@@ -20,7 +20,6 @@ from scipy.spatial.transform import Rotation as R
 # ──────────────── helpers ────────────────
 def load_binary(path: Path) -> np.ndarray:
     img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-    # img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_NEAREST)
     if img is None:
         raise FileNotFoundError(path)
     _, bw = cv2.threshold(img, 0, 1, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
@@ -38,14 +37,6 @@ def distance_transform(edge: np.ndarray) -> np.ndarray:
 
 
 def chamfer_score(dist_map: np.ndarray, tmpl: np.ndarray) -> np.ndarray:
-    # import matplotlib.pyplot as plt
-    # plt.imshow(tmpl, cmap="gray")
-    # plt.title("Chamfer Template")
-    # plt.show()
-    # plt.imshow(dist_map, cmap="gray")
-    # plt.title("Distance Map")
-    # plt.show()
-
     return cv2.filter2D(dist_map, cv2.CV_32F, tmpl, borderType=cv2.BORDER_REPLICATE)
 
 
@@ -55,7 +46,7 @@ def render_pointcloud(cloud_path: str,
                       color_by="height",
                       out_path: str | None = None):
     """
-    Orthographic bird’s-eye render of a point cloud using Open3D.
+    Orthographic bird's-eye render of a point cloud using Open3D.
 
     Parameters
     ----------
@@ -78,10 +69,13 @@ def render_pointcloud(cloud_path: str,
         Camera intrinsics+extrinsics used for reproducibility.
     """
 
+    DOWNSAMPLE_VOXEL_SIZE = 0.02
+
     # ------------------------------------------------------------
     # 1. Load point cloud and basic stats
     # ------------------------------------------------------------
-    pcd = o3d.t.io.read_point_cloud(cloud_path)          # Open3D I/O  :contentReference[oaicite:0]{index=0}
+    pcd = o3d.t.io.read_point_cloud(cloud_path)
+    
     seg = pcd.point.seg.numpy().reshape(-1)
     normals = pcd.point.normals.numpy()
     
@@ -90,11 +84,14 @@ def render_pointcloud(cloud_path: str,
     mask = np.logical_and(mask, np.abs(normals[:, 2]) < 0.3)
     
     pcd = o3d.io.read_point_cloud(cloud_path)
-    # pcd.rotate(np.asarray(R.from_euler('x', 90, degrees=True).as_matrix()))
     pts = np.asarray(pcd.points)[mask]
     pcd.points = o3d.utility.Vector3dVector(pts)
     if pts.size == 0:
         raise ValueError("Point cloud is empty!")
+    
+    # Downsample to reduce GPU load and avoid segfault
+    pcd = pcd.voxel_down_sample(voxel_size=DOWNSAMPLE_VOXEL_SIZE)
+    pts = np.asarray(pcd.points)
 
     # XY extent → pixel resolution
     min_xy = pts[:, :2].min(0)
@@ -106,67 +103,51 @@ def render_pointcloud(cloud_path: str,
     # ------------------------------------------------------------
     # 2. Prepare colours (height, intensity or original RGB)
     # ------------------------------------------------------------
-    # if color_by == "height":
-    #     z = pts[:, 2]
-    #     z_norm = (z - z.min()) / (z.ptp() + 1e-9)
-    #     colours = np.stack([z_norm, 1-z_norm, 0.5*np.ones_like(z_norm)], 1)
-    # elif color_by == "intensity" and pcd.has_intensities():
-    #     inten = np.asarray(pcd.intensities)
-    #     inten = (inten - inten.min()) / (inten.ptp() + 1e-9)
-    #     colours = np.stack([inten]*3, 1)
-    # elif pcd.has_colors():
-    #     colours = np.asarray(pcd.colors)
-    # else:
     colours = np.ones_like(pts)    # light grey fallback
     pcd.colors = o3d.utility.Vector3dVector(colours)
 
     # ------------------------------------------------------------
     # 3. Build an off-screen scene and orthographic camera
     # ------------------------------------------------------------
-    # 3.1 Renderer & scene
-    renderer = o3d.visualization.rendering.OffscreenRenderer(width_px,
-                                                             height_px) 
+    renderer = o3d.visualization.rendering.OffscreenRenderer(width_px, height_px)
     scene = renderer.scene
     scene.set_background(background)
 
     mat = o3d.visualization.rendering.MaterialRecord()
-    mat.shader = "defaultUnlit"                        # colour exactly as set
+    mat.shader = "defaultUnlit"
     mat.point_size = 1.0
     scene.add_geometry("cloud", pcd, mat)
 
     # 3.2 Camera: look straight down –Z  (world Z=up convention)
-    bbox   = pcd.get_axis_aligned_bounding_box()
+    bbox = pcd.get_axis_aligned_bounding_box()
     center = bbox.get_center()
-    eye    = center + np.array([0, 0, bbox.get_extent()[2] * 2])
-    up     = np.array([0, 1, 0])
+    extent_z = bbox.get_extent()[2]
+    eye = center + np.array([0, 0, extent_z * 2])
+    up = np.array([0, 1, 0])
 
     cam = scene.camera
-    # ortho frustum boundaries (left, right, bottom, top, near, far)
     cam.set_projection(o3d.visualization.rendering.Camera.Projection.Ortho,
                        -extent_xy[0]/2, extent_xy[0]/2,
                        -extent_xy[1]/2, extent_xy[1]/2,
-                       0.1, bbox.get_extent()[2]*4)   
-    cam.look_at(center, eye, up)                  
+                       0.1, extent_z*4)
+    cam.look_at(center, eye, up)
 
     # ------------------------------------------------------------
     # 4. Render
     # ------------------------------------------------------------
-    img_o3d = renderer.render_to_image()               
-    img_np = np.asarray(img_o3d)                       # uint8 RGBA
+    img_o3d = renderer.render_to_image()
+    img_np = np.asarray(img_o3d)
 
     # optional disk write
     if out_path:
         o3d.io.write_image(out_path, img_o3d)
 
-    # clamp renderer resources
-    # renderer.close()
-
     cam_dict = dict(width=width_px, height=height_px,
                     left=-extent_xy[0]/2, right=extent_xy[0]/2,
                     bottom=-extent_xy[1]/2, top=extent_xy[1]/2,
-                    near=0.1, far=bbox.get_extent()[2]*4,
+                    near=0.1, far=extent_z*4,
                     eye=eye.tolist(), center=center.tolist(), 
-                    extent = extent_xy.tolist(),
+                    extent=extent_xy.tolist(),
                     up=up.tolist())
     
     _, bw = cv2.threshold(img_np.mean(axis=-1).astype(np.uint8), 0, 1, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
@@ -213,31 +194,16 @@ def pad_for_rotation(img: np.ndarray) -> np.ndarray:
 def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 180), rot_step = 1.0, scale_range = (0.8, 1.4), scale_step = 0.02, debug=False):
     mpp = 0.05
     moving_bw, cam_info, cloud_shift = render_pointcloud(str(cloud), mpp, out_path="test.png")
-    # import matplotlib.pyplot as plt
-    # plt.imshow(moving_bw)
-    # plt.show()
 
     fixed_bw = load_binary(fixed)
     floorplan_height = fixed_bw.shape[0] * args_mpp
     fixed_bw, mpp_fixed = downscale_img(fixed_bw, mpp=args_mpp)
-    # invert y axis of the fixed image
-    # fixed_bw = np.flipud(fixed_bw)
-    # moving_bw = load_binary(args.moving)
 
     fac = mpp / mpp_fixed
-    # fac = 1
-    print ("mpp_fixed: ", mpp_fixed)
-    # breakpoint()
-    
     moving_bw = cv2.resize(moving_bw, (int(moving_bw.shape[1] * fac), int(moving_bw.shape[0] * fac)), interpolation=cv2.INTER_LINEAR)
     scaling_mat = np.eye(4, dtype=np.float32)
     scaling_mat[:3, :3] = scaling_mat[:3, :3] * fac
     cloud_shift = scaling_mat @ cloud_shift  # scale cloud-to-img transform matrix
-
-    print ("mpp", mpp)
-
-    # fixed_edges = edge_map(fixed_bw)
-    # moving_edges = edge_map(moving_bw)
 
     recall_dist = 1 / (1+distance_transform(fixed_bw))
     dist_min = 0
@@ -471,6 +437,7 @@ def align_cloud(fixed: Path, args_mpp: float, cloud: Path, rot_range = (-180, 18
 
     if debug:
         cv2.destroyAllWindows()
+    
     return M_cloud, aligned
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ def extract_scale_from_transform(T):
     return uniform_scale
 
 def align_project(proj_dir: Path, wall_mask_path: Path = None):
-    #Check if the project directory exists
+    # Check if the project directory exists
     if not proj_dir.exists():
         raise FileNotFoundError(f"Project directory {proj_dir} does not exist.")
     
@@ -43,23 +43,31 @@ def align_project(proj_dir: Path, wall_mask_path: Path = None):
     # Check if wall mask exists
     if not waffle_mask_path.exists():
         raise FileNotFoundError(f"Wall mask file not found: {waffle_mask_path}. Please ensure wall mask is created before running alignment.")
+
     final_transform_3D, aligned_img = align_cloud(waffle_mask_path, align_info["mpp"], cloud_path, debug=False)
+    
+    # Write aligned image
     cv2.imwrite(str(aligned_floorplan_path), aligned_img)
+    
     align_info["scan_to_floorplan"] = final_transform_3D.tolist()  # Convert to list for JSON serialization
     align_info["scale"] = extract_scale_from_transform(final_transform_3D)
+    
     # Save the updated alignment info
     with open(align_json, "w") as f:
         json.dump(align_info, f, indent=4)
 
     # Save final_transform_3D as dense_floorplan_transform.npy
-    np.save(proj_dir / "floorplan" / "dense_floorplan_transform.npy", final_transform_3D)
-    np.savetxt(proj_dir / "floorplan" / "dense_floorplan_scale.txt", [align_info["scale"]], fmt='%.6f')
+    transform_npy_path = proj_dir / "floorplan" / "dense_floorplan_transform.npy"
+    np.save(transform_npy_path, final_transform_3D)
+    
+    # Save scale as text file
+    scale_txt_path = proj_dir / "floorplan" / "dense_floorplan_scale.txt"
+    np.savetxt(scale_txt_path, [align_info["scale"]], fmt='%.6f')
     
     # Create identity matrix for successful auto-alignment API calls
     identity_matrix = np.eye(4, dtype=np.float32)
-    
-    # Save identity matrix as JSON for API calls (successful auto-alignment)
-    with open(proj_dir / "floorplan" / "auto_align_success_identity_matrix.json", "w") as f:
+    identity_json_path = proj_dir / "floorplan" / "auto_align_success_identity_matrix.json"
+    with open(identity_json_path, "w") as f:
         json.dump(identity_matrix.tolist(), f, indent=2)
 
 if __name__ == "__main__":
